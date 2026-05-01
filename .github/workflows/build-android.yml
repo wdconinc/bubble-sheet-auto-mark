@@ -35,7 +35,19 @@ jobs:
             -v $HOME/.buildozer:/home/user/.buildozer \
             -w /home/user/hostcwd \
             kivy/buildozer@sha256:a291fd4c0c9dfce036c7c79c820af6faa6461d386969ea00303b45164ff37ac4 \
-            -v android debug
+            bash -lc '
+              set -euo pipefail
+
+              # Install SDK components needed for aidl (Build Tools)
+              yes | sdkmanager --licenses >/dev/null || true
+              sdkmanager --install \
+                "platform-tools" \
+                "build-tools;34.0.0" \
+                "platforms;android-34"
+
+              # Build
+              buildozer -v android debug
+            '
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
