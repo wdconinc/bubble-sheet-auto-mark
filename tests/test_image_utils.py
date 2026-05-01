@@ -1,9 +1,6 @@
 """Tests for bubble_mark.processing.image_utils."""
 from __future__ import annotations
 
-import os
-import tempfile
-
 import cv2
 import numpy as np
 import pytest

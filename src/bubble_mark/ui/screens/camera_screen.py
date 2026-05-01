@@ -51,11 +51,8 @@ class CameraScreen(Screen):
         from bubble_mark.processing.analyzer import BubbleAnalyzer
         from bubble_mark.processing.detector import BubbleSheetDetector
         from bubble_mark.processing.grader import BubbleSheetGrader
-        from bubble_mark.processing.image_utils import load_image
-
-        app = self.manager.app if hasattr(self.manager, "app") else None
-        # Access global app instance via kivy
         from kivy.app import App as KivyApp
+
         app = KivyApp.get_running_app()
 
         if app is None or app.answer_key is None:

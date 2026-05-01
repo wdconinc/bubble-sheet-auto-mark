@@ -95,3 +95,20 @@ class TestLocateIdBubbles:
         for col in columns:
             for bubble in col:
                 assert len(bubble) == 4
+
+    def test_id_bubble_y_coords_in_full_image_space(self):
+        """ID bubble y coordinates must be offset into the full normalised image.
+
+        The ID section starts at ~74% of the image height; y values below that
+        threshold confirm the offset is applied correctly.
+        """
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        id_section_start = int(normalised.shape[0] * 0.74)
+        columns = d.locate_id_bubbles(normalised)
+        for col in columns:
+            for (x, y, bw, bh) in col:
+                assert y >= id_section_start, (
+                    f"ID bubble y={y} is above the ID section start at {id_section_start}"
+                )

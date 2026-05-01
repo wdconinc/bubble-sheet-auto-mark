@@ -1,10 +1,9 @@
 """Bubble state analyser: determine whether bubbles are filled."""
 from __future__ import annotations
 
-import cv2
 import numpy as np
 
-from bubble_mark.processing.image_utils import apply_threshold, to_grayscale
+from bubble_mark.processing.image_utils import to_grayscale
 
 
 class BubbleAnalyzer:

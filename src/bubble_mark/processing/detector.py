@@ -3,15 +3,12 @@ from __future__ import annotations
 
 from typing import Optional
 
-import cv2
 import numpy as np
 
 from bubble_mark.processing.image_utils import (
-    apply_threshold,
     find_page_contour,
     perspective_transform,
     resize_image,
-    to_grayscale,
 )
 
 # Standard normalised sheet dimensions used internally
@@ -73,7 +70,7 @@ class BubbleSheetDetector:
         # Answer section occupies roughly the top 70% of the sheet,
         # leaving room for an ID section at the bottom.
         section = self._answer_section(normalised_image)
-        return self._build_bubble_grid(section, num_q, num_c, offset_y=_answer_offset_y())
+        return self._build_bubble_grid(section, num_q, num_c)
 
     def locate_id_bubbles(
         self, normalised_image: np.ndarray
@@ -86,10 +83,13 @@ class BubbleSheetDetector:
         num_d = self.layout_config["num_id_digits"]
         num_choices = self.layout_config["id_choices_per_digit"]
 
+        id_top = int(normalised_image.shape[0] * 0.74)
         section = self._id_section(normalised_image)
         # For ID we build a grid where rows = digit choices, cols = digits
-        # then transpose to get per-digit lists
-        raw_grid = self._build_bubble_grid(section, num_choices, num_d, offset_y=_id_offset_y())
+        # then transpose to get per-digit lists.
+        # Pass id_top as offset_y so returned y coordinates are in the full
+        # normalised_image coordinate space (needed by BubbleAnalyzer).
+        raw_grid = self._build_bubble_grid(section, num_choices, num_d, offset_y=id_top)
         # raw_grid[row][col] → we want [col][row]
         columns: list[list[tuple[int, int, int, int]]] = [
             [raw_grid[row][col] for row in range(num_choices)]
@@ -144,9 +144,3 @@ class BubbleSheetDetector:
         return grid
 
 
-def _answer_offset_y() -> int:
-    return 0
-
-
-def _id_offset_y() -> int:
-    return 0

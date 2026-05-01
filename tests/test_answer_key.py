@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import csv
-import os
 
 import pytest
 
@@ -50,7 +49,7 @@ class TestValidate:
 
     def test_invalid_digit_6(self):
         # 6 is not a valid choice
-        assert AnswerKey.__new__(AnswerKey).__class__("6").validate() is False
+        assert AnswerKey("6").validate() is False
 
     def test_invalid_after_normalisation(self):
         # letters are normalised → should be valid
