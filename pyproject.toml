@@ -10,13 +10,15 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
-    "kivy==2.3.1",
     "opencv-python-headless>=4.8",
     "numpy>=1.26",
     "Pillow>=10.0",
 ]
 
 [project.optional-dependencies]
+kivy = [
+    "kivy==2.3.1",
+]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=4.0",
