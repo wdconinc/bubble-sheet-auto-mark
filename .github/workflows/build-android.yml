@@ -7,6 +7,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  actions: read
+  packages: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,17 +25,17 @@ jobs:
       - name: Cache Buildozer home directory
         uses: actions/cache@v4
         with:
-          path: ~/.buildozer
+          path: $HOME/.buildozer
           key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
 
       - name: Build APK with Buildozer Docker
         run: |
           docker run --rm \
             -v $GITHUB_WORKSPACE:/home/user/hostcwd \
-            -v ~/.buildozer:/home/user/.buildozer \
+            -v $HOME/.buildozer:/home/user/.buildozer \
             -w /home/user/hostcwd \
             kivy/buildozer@sha256:a291fd4c0c9dfce036c7c79c820af6faa6461d386969ea00303b45164ff37ac4 \
-            buildozer -v android debug
+            -v android debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
