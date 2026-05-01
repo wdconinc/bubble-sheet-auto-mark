@@ -2,27 +2,26 @@ name: Build Android APK
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "buildozer.spec"
-      - ".github/workflows/build-android.yml"
-  workflow_dispatch:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Cache Buildozer global directory
+      - name: Cache Buildozer home directory
         uses: actions/cache@v4
         with:
           path: $HOME/.buildozer
-          key: buildozer-${{ hashFiles('buildozer.spec') }}
-          restore-keys: buildozer-
+          key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
 
       - name: Build APK with Buildozer Docker
         run: |
@@ -30,11 +29,30 @@ jobs:
             -v $GITHUB_WORKSPACE:/home/user/hostcwd \
             -v $HOME/.buildozer:/home/user/.buildozer \
             -w /home/user/hostcwd \
-            kivy/buildozer \
+            kivy/buildozer@sha256:a291fd4c0c9dfce036c7c79c820af6faa6461d386969ea00303b45164ff37ac4 \
             -v android debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: android-apk
+          name: bubble-sheet-auto-mark-apk
           path: bin/*.apk
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bubble-sheet-auto-mark-apk
+          path: bin
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/*.apk
