@@ -2,3 +2,4 @@ kivy==2.3.1
 opencv-python-headless>=4.8
 numpy>=1.26
 Pillow>=10.0
+requests>=2.31

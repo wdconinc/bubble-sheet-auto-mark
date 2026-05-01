@@ -10,6 +10,7 @@ if _src not in sys.path:
     sys.path.insert(0, _src)
 
 from kivy.app import App
+from kivy.clock import Clock
 from kivy.uix.screenmanager import ScreenManager, SlideTransition
 
 from bubble_mark.models.answer_key import AnswerKey
@@ -19,6 +20,7 @@ from bubble_mark.ui.screens.camera_screen import CameraScreen
 from bubble_mark.ui.screens.home_screen import HomeScreen
 from bubble_mark.ui.screens.results_screen import ResultsScreen
 from bubble_mark.ui.screens.settings_screen import SettingsScreen
+from bubble_mark.updater import check_and_prompt_update
 
 
 class BubbleMarkApp(App):
@@ -35,6 +37,7 @@ class BubbleMarkApp(App):
         self.sm.add_widget(CameraScreen(name="camera"))
         self.sm.add_widget(SettingsScreen(name="settings"))
         self.sm.add_widget(ResultsScreen(name="results"))
+        Clock.schedule_once(lambda dt: check_and_prompt_update(self), 2)
         return self.sm
 
     # ------------------------------------------------------------------
