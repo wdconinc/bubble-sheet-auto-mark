@@ -1,0 +1,31 @@
+title: Bubble Sheet Auto-Mark
+description: A privacy-first, cross-platform application for grading bubble-sheet tests using a smartphone camera or desktop scanner.
+baseurl: "/bubble-sheet-auto-mark"
+url: "https://wdconinc.github.io"
+
+theme: just-the-docs
+
+color_scheme: light
+
+# Footer
+footer_content: "Released under the <a href=\"https://github.com/wdconinc/bubble-sheet-auto-mark/blob/main/LICENSE\">MIT License</a>. Source on <a href=\"https://github.com/wdconinc/bubble-sheet-auto-mark\">GitHub</a>."
+
+# Aux links (top-right)
+aux_links:
+  "View on GitHub":
+    - "https://github.com/wdconinc/bubble-sheet-auto-mark"
+
+aux_links_new_tab: true
+
+# Search
+search_enabled: true
+
+# Back to top
+back_to_top: true
+back_to_top_text: "Back to top"
+
+# Heading anchor links
+heading_anchors: true
+
+plugins:
+  - jekyll-seo-tag
