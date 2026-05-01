@@ -21,6 +21,8 @@ android.api = 33
 android.minapi = 26
 android.ndk = 25b
 android.arch = arm64-v8a
+android.build_tools_version = 34.0.0
+android.accept_sdk_android_license = True
 
 # iOS specific
 ios.kivy_ios_url = https://github.com/kivy/kivy-ios

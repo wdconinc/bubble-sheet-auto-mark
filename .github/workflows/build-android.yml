@@ -22,32 +22,37 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y --no-install-recommends \
+            git zip unzip autoconf libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libffi-dev libssl-dev
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses
+
+      - name: Install Android SDK components
+        run: sdkmanager "build-tools;34.0.0" "platforms;android-33" "platform-tools"
+
+      - name: Install Buildozer and Cython
+        run: pip install --upgrade buildozer cython
+
       - name: Cache Buildozer home directory
         uses: actions/cache@v4
         with:
-          path: $HOME/.buildozer
+          path: ~/.buildozer
           key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
 
-      - name: Build APK with Buildozer Docker
-        run: |
-          docker run --rm \
-            -v $GITHUB_WORKSPACE:/home/user/hostcwd \
-            -v $HOME/.buildozer:/home/user/.buildozer \
-            -w /home/user/hostcwd \
-            kivy/buildozer@sha256:a291fd4c0c9dfce036c7c79c820af6faa6461d386969ea00303b45164ff37ac4 \
-            bash -lc '
-              set -euo pipefail
-
-              # Install SDK components needed for aidl (Build Tools)
-              yes | sdkmanager --licenses >/dev/null || true
-              sdkmanager --install \
-                "platform-tools" \
-                "build-tools;34.0.0" \
-                "platforms;android-34"
-
-              # Build
-              buildozer -v android debug
-            '
+      - name: Build APK
+        run: buildozer -v android debug
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
