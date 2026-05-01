@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+      - "buildozer.spec"
+      - ".github/workflows/build-android.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Buildozer global directory
+        uses: actions/cache@v4
+        with:
+          path: $HOME/.buildozer
+          key: buildozer-${{ hashFiles('buildozer.spec') }}
+          restore-keys: buildozer-
+
+      - name: Build APK with Buildozer Docker
+        run: |
+          docker run --rm \
+            -v $GITHUB_WORKSPACE:/home/user/hostcwd \
+            -v $HOME/.buildozer:/home/user/.buildozer \
+            -w /home/user/hostcwd \
+            kivy/buildozer \
+            -v android debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: bin/*.apk
