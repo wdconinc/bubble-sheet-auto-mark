@@ -36,11 +36,12 @@ jobs:
             zlib1g-dev libncurses5-dev libncursesw5-dev \
             libffi-dev libssl-dev
 
-      - name: Accept Android SDK licenses
-        run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
-
-      - name: Install Android SDK components
-        run: $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" "platforms;android-33" "platform-tools"
+      - name: Accept Android SDK licenses for buildozer
+        run: |
+          mkdir -p $HOME/.buildozer/android/platform/android-sdk
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            --sdk_root=$HOME/.buildozer/android/platform/android-sdk \
+            --licenses
 
       - name: Install Buildozer and Cython
         run: pip install --upgrade buildozer cython
