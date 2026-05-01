@@ -25,7 +25,7 @@ jobs:
       - name: Cache Buildozer home directory
         uses: actions/cache@v4
         with:
-          path: ~/.buildozer
+          path: $HOME/.buildozer
           key: ${{ runner.os }}-buildozer-${{ hashFiles('buildozer.spec', 'requirements.txt') }}
 
       - name: Build APK with Buildozer Docker
