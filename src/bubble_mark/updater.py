@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 import threading
+import urllib.error
+import urllib.request
 import webbrowser
-
-import requests
 
 try:
     from bubble_mark import __version__ as CURRENT_VERSION
@@ -14,6 +15,7 @@ except ImportError:
     CURRENT_VERSION = "0.1.0"
 
 GITHUB_REPO = "wdconinc/bubble-sheet-auto-mark"
+_GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 
 def get_latest_release() -> tuple[str, str | None]:
@@ -23,11 +25,16 @@ def get_latest_release() -> tuple[str, str | None]:
     never crashes when offline or when the API is unavailable.
     """
     try:
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
-        resp = requests.get(url, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        latest_version = data["tag_name"].lstrip("v")
+        req = urllib.request.Request(
+            _GITHUB_API_URL,
+            headers={
+                "User-Agent": f"bubble-sheet-auto-mark/{CURRENT_VERSION}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data: dict = json.loads(resp.read())
+        latest_version: str = data["tag_name"].lstrip("v")
         apk_url: str | None = next(
             (
                 asset["browser_download_url"]
@@ -37,7 +44,7 @@ def get_latest_release() -> tuple[str, str | None]:
             None,
         )
         return latest_version, apk_url
-    except (requests.RequestException, KeyError, ValueError):
+    except (urllib.error.URLError, KeyError, ValueError):
         return "0.0.0", None
 
 
