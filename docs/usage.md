@@ -52,7 +52,7 @@ Hold or place each bubble sheet within the camera frame. The application will:
 
 1. **Detect** the sheet boundary and apply perspective correction.
 2. **Read** the student-ID bubble grid.
-3. **Analyse** each answer bubble (filled vs. blank vs. multiple).
+3. **Analyze** each answer bubble (filled vs. blank vs. multiple).
 4. **Score** the sheet against the answer key (if one is configured).
 
 A summary is displayed on screen for each detected sheet.

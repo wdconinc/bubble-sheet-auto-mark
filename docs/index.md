@@ -18,7 +18,7 @@ A **privacy-first**, cross-platform application for grading bubble-sheet tests u
 | Feature | Details |
 |---|---|
 | **Input sources** | Live camera, recorded video, or imported image files |
-| **Automatic detection** | Perspective correction and sheet normalisation via OpenCV |
+| **Automatic detection** | Perspective correction and sheet normalization via OpenCV |
 | **Student-ID recognition** | Reads the bubble-coded ID grid from each sheet |
 | **Answer-key comparison** | Configurable number of questions and choices (A–E) |
 | **CSV export** | One row per sheet: `student_id, answers, score, num_correct, num_questions` |
