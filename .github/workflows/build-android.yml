@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -29,7 +29,7 @@ jobs:
             -v $GITHUB_WORKSPACE:/home/user/hostcwd \
             -v ~/.buildozer:/home/user/.buildozer \
             -w /home/user/hostcwd \
-            kivy/buildozer \
+            kivy/buildozer@sha256:a291fd4c0c9dfce036c7c79c820af6faa6461d386969ea00303b45164ff37ac4 \
             buildozer -v android debug
 
       - name: Upload APK artifact
@@ -38,8 +38,21 @@ jobs:
           name: bubble-sheet-auto-mark-apk
           path: bin/*.apk
 
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bubble-sheet-auto-mark-apk
+          path: bin
+
       - name: Upload APK to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: bin/*.apk
