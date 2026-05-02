@@ -30,6 +30,29 @@ def _validate_region(region: Optional[list]) -> Optional[list]:
     return [x1, y1, x2, y2]
 
 
+def _validate_edge_lines(lines: Optional[list]) -> Optional[list]:
+    """Return *lines* if it is a valid list of four ``[x1,y1,x2,y2]`` lines.
+
+    Each element must be a list/tuple of exactly four numeric values.  Returns
+    *None* if validation fails (wrong count, wrong element type, non-numeric
+    values, etc.).
+    """
+    if lines is None:
+        return None
+    if not isinstance(lines, (list, tuple)) or len(lines) != 4:
+        return None
+    try:
+        validated = []
+        for entry in lines:
+            if not isinstance(entry, (list, tuple)) or len(entry) != 4:
+                return None
+            coords = [float(v) for v in entry]
+            validated.append(coords)
+        return validated
+    except (TypeError, ValueError):
+        return None
+
+
 class AppSettings:
     """Application-wide settings.
 
@@ -51,6 +74,15 @@ class AppSettings:
         where the student-ID bubbles are located on the normalised sheet.
         When *None* the detector falls back to the built-in heuristic
         (bottom ~26 % of the sheet).
+    page_edge_lines:
+        Optional list of exactly four ``[x1, y1, x2, y2]`` line definitions
+        drawn by the user on the reference sheet to mark the four page edges.
+        Used by :func:`~bubble_mark.processing.distortion.correct_distortion_from_lines`
+        to compute the perspective warp for the reference setup flow.
+    reference_color_channel:
+        Index of the BGR color channel to use as the primary print-color
+        reference channel (0=Blue, 1=Green, 2=Red).  Defaults to ``1``
+        (green), which offers good contrast for black/dark-blue ink.
     """
 
     def __init__(
@@ -60,12 +92,16 @@ class AppSettings:
         fill_threshold: float = 0.5,
         answer_region: Optional[list] = None,
         id_region: Optional[list] = None,
+        page_edge_lines: Optional[list] = None,
+        reference_color_channel: int = 1,
     ) -> None:
         self.layout_config: dict = {**_DEFAULT_LAYOUT, **(layout_config or {})}
         self.reference_image_path: Optional[str] = reference_image_path
         self.fill_threshold: float = fill_threshold
         self.answer_region: Optional[list] = _validate_region(answer_region)
         self.id_region: Optional[list] = _validate_region(id_region)
+        self.page_edge_lines: Optional[list] = _validate_edge_lines(page_edge_lines)
+        self.reference_color_channel: int = int(reference_color_channel)
 
     # ------------------------------------------------------------------
     # Serialisation
@@ -78,6 +114,8 @@ class AppSettings:
             "fill_threshold": self.fill_threshold,
             "answer_region": self.answer_region,
             "id_region": self.id_region,
+            "page_edge_lines": self.page_edge_lines,
+            "reference_color_channel": self.reference_color_channel,
         }
 
     @classmethod
@@ -88,6 +126,8 @@ class AppSettings:
             fill_threshold=d.get("fill_threshold", 0.5),
             answer_region=d.get("answer_region"),
             id_region=d.get("id_region"),
+            page_edge_lines=d.get("page_edge_lines"),
+            reference_color_channel=d.get("reference_color_channel", 1),
         )
 
     def save(self, path: str) -> None:

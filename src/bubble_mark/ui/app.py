@@ -122,6 +122,13 @@ class BubbleMarkApp(toga.App):
 
         return build_results_screen(self)
 
+    def _build_reference_setup(self) -> toga.Box:
+        from bubble_mark.ui.screens.reference_setup_screen import (
+            build_reference_setup_screen,
+        )
+
+        return build_reference_setup_screen(self)
+
     # ------------------------------------------------------------------
     # Navigation helpers
     # ------------------------------------------------------------------
@@ -145,6 +152,9 @@ class BubbleMarkApp(toga.App):
 
     def go_results(self) -> None:
         self._set_screen(self._build_results())
+
+    def go_reference_setup(self) -> None:
+        self._set_screen(self._build_reference_setup())
 
 
 def main() -> BubbleMarkApp:
