@@ -33,20 +33,21 @@ def _validate_region(region: Optional[list]) -> Optional[list]:
 def _validate_edge_lines(lines: Optional[list]) -> Optional[list]:
     """Return *lines* if it is a valid list of four ``[x1,y1,x2,y2]`` lines.
 
-    Each element must be a list/tuple of four numeric values.  Returns *None*
-    if validation fails.
+    Each element must be a list/tuple of exactly four numeric values.  Returns
+    *None* if validation fails (wrong count, wrong element type, non-numeric
+    values, etc.).
     """
     if lines is None:
+        return None
+    if not isinstance(lines, (list, tuple)) or len(lines) != 4:
         return None
     try:
         validated = []
         for entry in lines:
-            coords = [float(v) for v in entry]
-            if len(coords) != 4:
+            if not isinstance(entry, (list, tuple)) or len(entry) != 4:
                 return None
+            coords = [float(v) for v in entry]
             validated.append(coords)
-        if len(validated) != 4:
-            return None
         return validated
     except (TypeError, ValueError):
         return None

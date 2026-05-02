@@ -146,34 +146,37 @@ class TestDetectBubbleGridNoCv2:
 class TestDetectBlockGroups:
     def test_empty_lines_returns_single_group(self):
         lines = {"horizontal": [], "vertical": []}
-        groups = detect_block_groups(lines, num_rows=10, num_cols=5)
+        groups = detect_block_groups(lines, num_rows=10)
         assert groups == [list(range(10))]
 
     def test_uniform_spacing_returns_single_group(self):
         # Uniform gaps → no block separator
         h_pos = list(range(0, 100, 10))  # [0, 10, 20, ..., 90]
         lines = {"horizontal": h_pos, "vertical": []}
-        groups = detect_block_groups(lines, num_rows=9, num_cols=5)
+        groups = detect_block_groups(lines, num_rows=9)
         assert len(groups) == 1
 
     def test_large_gap_creates_two_groups(self):
-        # First half: positions 0-40 (step 10), large gap, second half 100-140
+        # First half: positions 0-40 (step 10), large gap (50 px), second half 100-140
         h_pos = list(range(0, 50, 10)) + list(range(100, 150, 10))
         lines = {"horizontal": h_pos, "vertical": []}
-        groups = detect_block_groups(lines, num_rows=len(h_pos) - 1, num_cols=5)
-        # Should detect the gap and produce 2 groups
-        assert len(groups) >= 1  # at least returns groups, not crash
+        groups = detect_block_groups(lines, num_rows=len(h_pos) - 1)
+        # The single large gap (50 px vs median 10 px) must produce exactly 2 groups.
+        assert len(groups) == 2
+        # First group covers the rows before the gap, second group after.
+        assert len(groups[0]) > 0
+        assert len(groups[1]) > 0
 
     def test_groups_cover_all_rows(self):
         h_pos = list(range(0, 60, 10))
         lines = {"horizontal": h_pos, "vertical": []}
         num_rows = len(h_pos) - 1
-        groups = detect_block_groups(lines, num_rows=num_rows, num_cols=5)
+        groups = detect_block_groups(lines, num_rows=num_rows)
         all_rows = sorted(r for g in groups for r in g)
         assert all_rows == list(range(len(all_rows)))
 
     def test_single_line_returns_single_group(self):
         lines = {"horizontal": [50], "vertical": []}
-        groups = detect_block_groups(lines, num_rows=5, num_cols=3)
+        groups = detect_block_groups(lines, num_rows=5)
         assert isinstance(groups, list)
         assert len(groups) >= 1

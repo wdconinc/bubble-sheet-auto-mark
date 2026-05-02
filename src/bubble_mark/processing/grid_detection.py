@@ -15,8 +15,8 @@ Public surface
     Primary entry-point.  Returns a list-of-rows of ``(x, y, w, h)`` bounding
     boxes in the same format as :meth:`BubbleSheetDetector._build_bubble_grid`.
 
-``detect_block_groups(lines, num_rows, num_cols)``
-    Helper that partitions detected lines into the expected row/column groups
+``detect_block_groups(lines, num_rows)``
+    Helper that partitions detected lines into the expected row groups
     to handle sheets that arrange questions in labelled blocks.
 """
 
@@ -138,7 +138,6 @@ def detect_bubble_grid(
 def detect_block_groups(
     lines: dict[str, list[int]],
     num_rows: int,
-    num_cols: int,
 ) -> list[list[int]]:
     """Partition detected line positions into block groups.
 
@@ -154,8 +153,6 @@ def detect_block_groups(
         lines in the region image.
     num_rows:
         Expected total number of bubble rows.
-    num_cols:
-        Expected total number of bubble columns.
 
     Returns
     -------
@@ -290,13 +287,18 @@ def _find_projection_peaks(
 def _snap_to_grid(detected: list[int], n: int, extent: int) -> list[int]:
     """Return *n* evenly-spaced positions inferred from *detected* lines.
 
-    If *detected* already has ≥ *n* positions they are clustered into *n*
-    groups (k-means-like) and the cluster centres are returned.
+    When *detected* has ``≥ n`` positions they are clustered into *n* groups
+    (1-D k-means) and the cluster centres are returned as integer pixel
+    positions.
 
-    If *detected* has exactly *n* positions they are returned as-is.
+    When *detected* has fewer than *n* positions, the gaps between the known
+    positions are subdivided until *n* positions are available; if fewer than
+    two positions are known an arithmetic fallback based on *extent* is used.
 
-    The result is a sorted list of *n* integer pixel positions, always
-    including a position near 0 and near *extent*.
+    The returned list is sorted and has exactly *n* elements (or fewer if not
+    enough input is provided).  Endpoint positions near 0 or *extent* are not
+    explicitly enforced — the output reflects the geometry implied by
+    *detected*.
     """
     if len(detected) == 0:
         return []

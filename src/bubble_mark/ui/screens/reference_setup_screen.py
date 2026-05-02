@@ -21,7 +21,8 @@ rectangle corners.  A visual preview is rendered by drawing the entered
 geometry onto a copy of the image and displaying it in a Toga ``ImageView``.
 
 When the user confirms the setup the corrected reference image is saved
-alongside the source image (as ``<name>_corrected.png``) so that the grader
+alongside the source image (preserving the original file extension, e.g.
+``<name>_corrected.jpg`` or ``<name>_corrected.png``) so that the grader
 can load it for cross-correlation alignment.
 """
 
@@ -89,7 +90,11 @@ def _draw_geometry_on_image(
     answer_rect: list[float] | None,
     id_rect: list[float] | None,
 ) -> np.ndarray:
-    """Return a BGR copy of *image* with the entered geometry drawn on it."""
+    """Return a BGR copy of *image* with the entered geometry drawn on it.
+
+    Uses cv2 when available; falls back to Pillow ``ImageDraw`` so that the
+    preview remains useful on platforms without OpenCV (e.g., Android).
+    """
     try:
         import cv2 as _cv2
 
@@ -107,7 +112,32 @@ def _draw_geometry_on_image(
     except ImportError:
         pass
 
-    # Pure NumPy fallback: just return a copy (geometry not drawn)
+    # Pillow fallback: draw lines and rectangles using ImageDraw.
+    try:
+        from PIL import Image as PILImage
+        from PIL import ImageDraw
+
+        arr = image[:, :, ::-1].copy() if image.ndim == 3 else image.copy()
+        pil = PILImage.fromarray(arr.astype(np.uint8))
+        draw = ImageDraw.Draw(pil)
+        for ln in lines:
+            x1, y1, x2, y2 = [int(v) for v in ln]
+            draw.line([(x1, y1), (x2, y2)], fill=(0, 180, 0), width=2)
+        if answer_rect:
+            ax1, ay1, ax2, ay2 = [int(v) for v in answer_rect]
+            draw.rectangle([(ax1, ay1), (ax2, ay2)], outline=(200, 80, 0), width=2)
+        if id_rect:
+            ix1, iy1, ix2, iy2 = [int(v) for v in id_rect]
+            draw.rectangle([(ix1, iy1), (ix2, iy2)], outline=(180, 0, 180), width=2)
+        # Convert back to BGR numpy array
+        out_arr = np.array(pil)
+        if out_arr.ndim == 3:
+            return out_arr[:, :, ::-1].copy()
+        return out_arr.copy()
+    except Exception:
+        pass
+
+    # Last resort: return an unannotated copy
     return image.copy()
 
 

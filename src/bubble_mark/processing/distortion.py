@@ -8,9 +8,10 @@ Two correction strategies are provided:
 
 2. **Correlation-based** (:func:`estimate_distortion_from_reference`): given a
    distortion-corrected reference image and an incoming sheet image, a
-   normalised cross-correlation is used to estimate a translational / small
-   in-plane shift and then a fine homography is recovered.  This allows fully
-   automatic correction of student sheets without user interaction.
+   normalised cross-correlation (phase correlation) is used to estimate the
+   dominant translational offset between the two images.  A translation-only
+   homography is returned; this is sufficient to correct small residual
+   misalignments after the initial perspective warp.
 
 All functions work with or without OpenCV via the same cv2 / NumPy-Pillow
 fallback pattern used throughout the rest of the package.
@@ -184,13 +185,14 @@ def estimate_distortion_from_reference(
     reference_image: np.ndarray,
     channel: Optional[int] = None,
 ) -> Optional[np.ndarray]:
-    """Estimate a homography that aligns *sheet_image* to *reference_image*.
+    """Estimate a translational offset that aligns *sheet_image* to *reference_image*.
 
     The alignment is performed in a single reference color channel (see
     :mod:`bubble_mark.processing.color_channel`).  An FFT-based normalised
-    cross-correlation is used to recover the dominant translational offset
-    between the two images; a full homography is then estimated if OpenCV is
-    available, otherwise only the translation is applied.
+    cross-correlation (phase correlation) is used to recover the dominant
+    translational offset between the two images.  A ``(3, 3)`` translation-only
+    homography is returned; perspective/shear distortions are not corrected here
+    (those are handled by the initial line-based perspective warp).
 
     Parameters
     ----------
@@ -207,9 +209,9 @@ def estimate_distortion_from_reference(
     Returns
     -------
     np.ndarray or None
-        A ``(3, 3)`` float64 homography matrix that maps *sheet_image*
-        coordinates to the reference frame.  Returns *None* if the images
-        cannot be aligned (e.g., very different sizes).
+        A ``(3, 3)`` float64 translation-only homography matrix that maps
+        *sheet_image* coordinates to the reference frame.  Returns *None* if
+        the images cannot be aligned (e.g., very different sizes).
     """
     from bubble_mark.processing.color_channel import extract_print_channel
 
@@ -224,9 +226,16 @@ def estimate_distortion_from_reference(
         else:
             from PIL import Image as PILImage
 
-            pil = PILImage.fromarray(reference_image[:, :, ::-1].astype(np.uint8))
-            pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
-            ref_resized = np.array(pil_resized)[:, :, ::-1].copy()
+            if reference_image.ndim == 3:
+                pil = PILImage.fromarray(
+                    reference_image[:, :, ::-1].astype(np.uint8), mode="RGB"
+                )
+                pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
+                ref_resized = np.array(pil_resized)[:, :, ::-1].copy()
+            else:
+                pil = PILImage.fromarray(reference_image.astype(np.uint8), mode="L")
+                pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
+                ref_resized = np.array(pil_resized)
     else:
         ref_resized = reference_image
 
@@ -259,6 +268,12 @@ def apply_homography(
 ) -> np.ndarray:
     """Warp *image* with the 3×3 homography *H*.
 
+    Convention: ``H`` is treated as a forward transform mapping source pixel
+    coordinates to destination pixel coordinates (i.e., a source pixel at
+    ``(x, y)`` maps to destination ``(x + H[0,2], y + H[1,2])`` for a
+    translation-only matrix).  Both the cv2 and the NumPy fallback path apply
+    this same convention so that results are platform-independent.
+
     Parameters
     ----------
     image:
@@ -273,9 +288,14 @@ def apply_homography(
     """
     h, w = image.shape[:2]
     if _HAVE_CV2:
+        # cv2.warpPerspective default (no WARP_INVERSE_MAP) performs
+        # dst(x,y) = src(H^{-1} * [x,y,1]^T), which is equivalent to
+        # moving a source pixel at (x,y) to destination (x + H[0,2], y + H[1,2])
+        # for a pure-translation H — matching the fallback convention below.
         return cv2.warpPerspective(image, H, (w, h))
 
-    # Pure fallback: only handle simple translation (H is nearly identity)
+    # Pure fallback: only handle simple translation (H is nearly identity).
+    # H[0,2] / H[1,2] give the forward shift (src → dst), matching cv2 above.
     dx = int(round(H[0, 2]))
     dy = int(round(H[1, 2]))
     return _translate_image(image, dx, dy)

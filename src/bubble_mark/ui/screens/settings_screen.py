@@ -91,7 +91,10 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
                 status_label.text = "Error opening file dialog."
                 return
             if result is not None:
-                ref_path_label.text = str(result)
+                path_str = str(result)
+                ref_path_label.text = path_str
+                # Immediately persist to app_settings so "Configure…" can use it
+                app.app_settings.reference_image_path = path_str
 
         asyncio.ensure_future(_pick())
 
