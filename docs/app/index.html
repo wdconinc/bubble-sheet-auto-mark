@@ -159,7 +159,7 @@
     .form-full { grid-column: 1 / -1; }
     .field { display: flex; flex-direction: column; gap: 4px; }
     .field label { font-size: .8rem; font-weight: 500; color: var(--muted); }
-    input[type="number"], input[type="text"] {
+    input[type="number"], input[type="text"], select {
       width: 100%;
       padding: 7px 10px;
       border: 1px solid var(--border);
@@ -168,7 +168,7 @@
       background: var(--bg);
       color: var(--text);
     }
-    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+    input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
 
     /* ── Buttons ── */
     .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
@@ -382,6 +382,14 @@
           <input type="file" id="ref-file-input" accept="image/*" hidden>
           <button class="btn-ghost" id="btn-ref-clear" type="button" style="display:none">🗑 Clear Regions</button>
         </div>
+        <div class="field" style="max-width:220px;margin-bottom:10px">
+          <label for="ref-color-channel">Reference color channel</label>
+          <select id="ref-color-channel">
+            <option value="0">Blue (0)</option>
+            <option value="1" selected>Green (1)</option>
+            <option value="2">Red (2)</option>
+          </select>
+        </div>
 
         <div id="ref-canvas-section" style="display:none">
           <div class="btn-row" style="margin-top:10px">
@@ -502,7 +510,8 @@ from bubble_mark.export.csv_exporter import CSVExporter
 
 def grade_sheet(image_bytes_js, num_questions, num_choices,
                 num_id_digits, fill_threshold, answer_key_str,
-                answer_region_json='null', id_region_json='null'):
+                answer_region_json='null', id_region_json='null',
+                reference_color_channel=1, reference_image_bytes_js=None):
     """Grade one bubble sheet image.
 
     Parameters
@@ -514,6 +523,13 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
         JSON string ``[x1, y1, x2, y2]`` (normalized 0–1) or ``'null'``.
     id_region_json:
         JSON string ``[x1, y1, x2, y2]`` (normalized 0–1) or ``'null'``.
+    reference_color_channel:
+        BGR channel index to use for cross-correlation alignment (0=Blue,
+        1=Green, 2=Red).  Defaults to ``1`` (green).
+    reference_image_bytes_js:
+        Optional JavaScript Uint8Array containing the blank reference sheet
+        image bytes.  When provided, a cross-correlation-based fine
+        distortion correction is applied before bubble detection.
     Returns a JSON string encoding the result dict, or the string ``'null'``
     when no sheet could be detected.
     """
@@ -532,8 +548,28 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
     answer_region = json.loads(str(answer_region_json))  # list or None
     id_region     = json.loads(str(id_region_json))      # list or None
 
+    # Load reference image for cross-correlation alignment when provided.
+    ref_bgr = None
+    ref_warning = None
+    if reference_image_bytes_js is not None:
+        try:
+            ref_data = reference_image_bytes_js.to_py()
+            ref_pil  = PILImage.open(io.BytesIO(ref_data)).convert('RGB')
+            ref_rgb  = np.array(ref_pil, dtype=np.uint8)
+            ref_bgr  = ref_rgb[:, :, ::-1].copy()
+        except Exception as exc:
+            print(f'[grade_sheet] reference image decode failed: {exc}', file=sys.stderr)
+            ref_bgr = None
+            ref_warning = f'Reference image could not be loaded ({exc}); alignment skipped.'
+
     answer_key = AnswerKey(str(answer_key_str)) if answer_key_str else None
-    detector = BubbleSheetDetector(layout, answer_region=answer_region, id_region=id_region)
+    detector = BubbleSheetDetector(
+        layout,
+        answer_region=answer_region,
+        id_region=id_region,
+        reference_image=ref_bgr,
+        reference_color_channel=int(reference_color_channel),
+    )
     analyzer = BubbleAnalyzer(float(fill_threshold))
     grader = BubbleSheetGrader(answer_key, detector, analyzer)
 
@@ -542,6 +578,10 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
         return 'null'
 
     out = result.to_dict()
+
+    # Surface any reference-image warning so the JS can display it.
+    if ref_warning is not None:
+        out['ref_warning'] = ref_warning
 
     # Encode the annotated overlay image as a base64 PNG so JavaScript can
     # draw it on the preview canvas without any additional round-trips.
@@ -624,6 +664,9 @@ const PYTHON_FILES = [
   'bubble_mark/processing/detector.py',
   'bubble_mark/processing/analyzer.py',
   'bubble_mark/processing/grader.py',
+  'bubble_mark/processing/color_channel.py',
+  'bubble_mark/processing/distortion.py',
+  'bubble_mark/processing/grid_detection.py',
   'bubble_mark/models/__init__.py',
   'bubble_mark/models/answer_key.py',
   'bubble_mark/models/grade_result.py',
@@ -805,13 +848,19 @@ function escHtml(s) {
 
 function getSettings() {
   return {
-    numQuestions:  parseInt($('num-questions').value)  || 30,
-    numChoices:    parseInt($('num-choices').value)    || 5,
-    numIdDigits:   parseInt($('num-id-digits').value)  || 9,
-    fillThreshold: parseFloat($('fill-threshold').value) || 0.5,
-    answerKey:     $('answer-key').value.trim(),
-    answerRegion:  answerRegion,   // [x1, y1, x2, y2] or null
-    idRegion:      idRegion,       // [x1, y1, x2, y2] or null
+    numQuestions:         parseInt($('num-questions').value)  || 30,
+    numChoices:           parseInt($('num-choices').value)    || 5,
+    numIdDigits:          parseInt($('num-id-digits').value)  || 9,
+    fillThreshold:        parseFloat($('fill-threshold').value) || 0.5,
+    answerKey:            $('answer-key').value.trim(),
+    answerRegion:         answerRegion,   // [x1, y1, x2, y2] or null
+    idRegion:             idRegion,       // [x1, y1, x2, y2] or null
+    referenceColorChannel: (() => {
+      // parseInt may return 0 for channel "Blue (0)"; avoid the `|| 1` pattern
+      // that would treat 0 as falsy and incorrectly fall back to 1.
+      const v = parseInt($('ref-color-channel').value);
+      return Number.isFinite(v) ? v : 1;
+    })(),
   };
 }
 
@@ -1003,11 +1052,12 @@ function idbDelete(key) {
 function saveSettings() {
   try {
     localStorage.setItem(LS_SETTINGS, JSON.stringify({
-      numQuestions:  $('num-questions').value,
-      numChoices:    $('num-choices').value,
-      numIdDigits:   $('num-id-digits').value,
-      fillThreshold: $('fill-threshold').value,
-      answerKey:     $('answer-key').value,
+      numQuestions:         $('num-questions').value,
+      numChoices:           $('num-choices').value,
+      numIdDigits:          $('num-id-digits').value,
+      fillThreshold:        $('fill-threshold').value,
+      answerKey:            $('answer-key').value,
+      referenceColorChannel: $('ref-color-channel').value,
     }));
   } catch (_) {}
 }
@@ -1030,11 +1080,12 @@ function restoreSettings() {
     const raw = localStorage.getItem(LS_SETTINGS);
     if (!raw) return;
     const s = JSON.parse(raw);
-    if (s.numQuestions  != null) $('num-questions').value  = s.numQuestions;
-    if (s.numChoices    != null) $('num-choices').value    = s.numChoices;
-    if (s.numIdDigits   != null) $('num-id-digits').value  = s.numIdDigits;
-    if (s.fillThreshold != null) $('fill-threshold').value = s.fillThreshold;
-    if (s.answerKey     != null) $('answer-key').value     = s.answerKey;
+    if (s.numQuestions          != null) $('num-questions').value    = s.numQuestions;
+    if (s.numChoices            != null) $('num-choices').value      = s.numChoices;
+    if (s.numIdDigits           != null) $('num-id-digits').value    = s.numIdDigits;
+    if (s.fillThreshold         != null) $('fill-threshold').value   = s.fillThreshold;
+    if (s.answerKey             != null) $('answer-key').value       = s.answerKey;
+    if (s.referenceColorChannel != null) $('ref-color-channel').value = s.referenceColorChannel;
   } catch (_) {}
 }
 
@@ -1219,12 +1270,19 @@ btnGrade.addEventListener('click', async () => {
 
   try {
     const s = getSettings();
+    // Retrieve the reference image bytes stored in IndexedDB (may be null).
+    let refBytes = null;
+    try { refBytes = await idbGet(IDB_KEY_REF); } catch (_) {}
+    if (!(refBytes instanceof Uint8Array) || refBytes.length === 0) refBytes = null;
+
     const resultJson = gradeSheetFn(
       pendingBytes,
       s.numQuestions, s.numChoices, s.numIdDigits,
       s.fillThreshold, s.answerKey,
       JSON.stringify(s.answerRegion),
-      JSON.stringify(s.idRegion)
+      JSON.stringify(s.idRegion),
+      s.referenceColorChannel,
+      refBytes
     );
 
     const result = JSON.parse(resultJson);
@@ -1248,19 +1306,25 @@ btnGrade.addEventListener('click', async () => {
 
       // Strip the large base64 blob before persisting — it would exhaust
       // localStorage quota (~5–10 MB limit) and cause saveResults() to fail.
-      const { annotated_image_b64: _dropped, ...resultToSave } = result;
+      const { annotated_image_b64: _dropped, ref_warning: _ref_warning, ...resultToSave } = result;
       results.push(resultToSave);
       saveResults();
       appendResultRow(resultToSave, results.length);
       refreshResultsPanel();
 
-      const scored = result.score != null;
-      setStatus(
-        scored
-          ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
-          : `✓ Detected ${result.answers.length} answers. (No answer key — scoring skipped.)`,
-        'success'
-      );
+      // Surface any reference-image warning the Python side raised.
+      if (result.ref_warning) {
+        console.warn('[grade_sheet] reference image warning:', result.ref_warning);
+        setStatus(`⚠ Reference image issue: ${result.ref_warning}`, 'error');
+      } else {
+        const scored = result.score != null;
+        setStatus(
+          scored
+            ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
+            : `✓ Detected ${result.answers.length} answers. (No answer key — scoring skipped.)`,
+          'success'
+        );
+      }
     }
   } catch (err) {
     setStatus(`Grading error: ${err.message}`, 'error');
@@ -1571,7 +1635,7 @@ $('settings-toggle').addEventListener('click', () => {
 // ── Start ────────────────────────────────────────────────────────────────────
 
 // Persist settings whenever any field changes.
-['num-questions', 'num-choices', 'num-id-digits', 'fill-threshold', 'answer-key'].forEach((id) => {
+['num-questions', 'num-choices', 'num-id-digits', 'fill-threshold', 'answer-key', 'ref-color-channel'].forEach((id) => {
   $(id).addEventListener('input', saveSettings);
 });
 
