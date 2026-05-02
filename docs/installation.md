@@ -25,7 +25,7 @@ nav_order: 2
 
 | Package | Purpose |
 |---|---|
-| `kivy==2.3.1` | Cross-platform UI framework |
+| `toga>=0.4` | Cross-platform UI framework (BeeWare) |
 | `opencv-python-headless>=4.8` | Image processing pipeline |
 | `numpy>=1.26` | Array operations |
 | `Pillow>=10.0` | Image I/O helpers |
@@ -44,33 +44,35 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
 # 3. Install dependencies
-pip install -r requirements.txt
+pip install -e ".[toga,dev]"
 
 # 4. Launch the app
-python main.py
+briefcase dev
+# or, after installation:
+bubble-mark
 ```
 
 ---
 
 ## Android
 
-Android builds use [Buildozer](https://buildozer.readthedocs.io/).
+Android builds use [Briefcase](https://briefcase.readthedocs.io/).
 
 ```bash
-# Install Buildozer (Linux / WSL recommended)
-pip install buildozer
+# Install Briefcase
+pip install briefcase
 
 # Build a debug APK
-buildozer android debug
+briefcase build android
 
-# Deploy to a connected device
-buildozer android debug deploy run
+# Deploy and run on a connected device
+briefcase run android
 ```
 
-The `buildozer.spec` file in the repository root already contains the correct settings for the project.
+All packaging configuration is in the `[tool.briefcase]` section of `pyproject.toml`.
 
 {: .note }
-Buildozer requires a Linux host (or WSL on Windows). The first build downloads the Android SDK and NDK, which takes some time.
+Building for Android requires the Android SDK. Briefcase will prompt you to install it automatically on first build.
 
 ---
 
@@ -79,8 +81,6 @@ Buildozer requires a Linux host (or WSL on Windows). The first build downloads t
 Install the extra dev dependencies to run the test suite:
 
 ```bash
-pip install -r requirements-dev.txt
-# or
 pip install -e ".[dev]"
 
 # Run all tests

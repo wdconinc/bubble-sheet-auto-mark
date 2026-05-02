@@ -9,7 +9,7 @@ A **privacy-first**, cross-platform application for grading bubble-sheet tests u
 - **Student-ID recognition** – reads the bubble-coded ID grid from each sheet
 - **Answer-key comparison** – configurable number of questions and choices (A–E)
 - **CSV export** – `student_id,answers,score,num_correct,num_questions`
-- **Cross-platform** – Linux, macOS, Windows, and Android (via Kivy + Buildozer)
+- **Cross-platform** – Linux, macOS, Windows, and Android (via Toga + Briefcase)
 - **MIT licensed**
 
 ## CSV Output Format
@@ -28,13 +28,15 @@ student_id,answers,score,num_correct,num_questions
 ### Prerequisites
 
 ```bash
-pip install -r requirements.txt
+pip install -e ".[toga,dev]"
 ```
 
 ### Run on Desktop
 
 ```bash
-python main.py
+briefcase dev
+# or, after installation:
+bubble-mark
 ```
 
 ### Run Tests
@@ -46,7 +48,8 @@ python -m pytest tests/ -v
 ### Build for Android
 
 ```bash
-buildozer android debug
+briefcase build android
+briefcase run android
 ```
 
 ## Project Layout
@@ -66,8 +69,8 @@ bubble-sheet-auto-mark/
 │   │   └── settings.py          # AppSettings (layout config)
 │   ├── export/
 │   │   └── csv_exporter.py      # CSV export
-│   └── ui/                      # Kivy screens (not imported by tests)
-└── tests/                       # pytest test suite (106 tests)
+│   └── ui/                      # Toga screens (not imported by tests)
+└── tests/                       # pytest test suite (~159 tests)
 ```
 
 ## Settings
