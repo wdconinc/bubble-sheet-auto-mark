@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "wheel", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "bubble-sheet-auto-mark"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Cross-platform bubble sheet auto-marking application"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -30,6 +30,11 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools_scm]
+# Derive __version__ from git tags (e.g. v0.2.0 → "0.2.0").
+# Falls back to "0.0.0.dev0" when there is no tag in the history.
+fallback_version = "0.0.0.dev0"
 
 [tool.briefcase]
 project_name = "Bubble Sheet Auto-Mark"
