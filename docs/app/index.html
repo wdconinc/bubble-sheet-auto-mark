@@ -293,6 +293,13 @@
     .good { color: var(--success); font-weight: 600; }
     .bad  { color: var(--danger);  font-weight: 600; }
     #no-results-msg { text-align: center; padding: 28px; color: var(--muted); font-size: .9rem; }
+    .btn-view-image {
+      background: none; border: none; cursor: pointer;
+      font-size: 1rem; padding: 0 4px; line-height: 1;
+      color: var(--primary); opacity: .8;
+    }
+    .btn-view-image:hover { opacity: 1; }
+    td.view-col { text-align: center; padding: 4px 6px; width: 32px; }
 
     /* ── Footer ── */
     footer {
@@ -604,6 +611,7 @@
               <th>Answers</th>
               <th>Score</th>
               <th>Correct / Total</th>
+              <th title="View image">🖼</th>
             </tr>
           </thead>
           <tbody id="results-tbody"></tbody>
@@ -2020,6 +2028,17 @@ btnRegrade.addEventListener('click', async () => {
 
 // ── Results ──────────────────────────────────────────────────────────────────
 
+/**
+ * Scroll to the Grade Images card, make the graded-tabs section visible,
+ * and activate the specified graded-sheet tab.
+ */
+function navigateToGradedSheet(gradedIdx) {
+  if (gradedIdx < 0 || gradedIdx >= gradedSheets.length) return;
+  gradedTabsSection.hidden = false;
+  gradedTabsSection.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  activateTab(gradedIdx);
+}
+
 function appendResultRow(r, idx) {
   const scored = r.score != null;
   const scoreTxt = scored ? `${(r.score * 100).toFixed(1)} %` : '–';
@@ -2030,6 +2049,9 @@ function appendResultRow(r, idx) {
   const ans = r.answers || '';
   const ansDisplay = ans.length > 35 ? ans.slice(0, 35) + '…' : ans;
 
+  // Find the corresponding gradedSheets entry (if images are still in memory).
+  const gradedIdx = gradedSheets.findIndex((s) => s.resultIdx === idx - 1);
+
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>${idx}</td>
@@ -2037,7 +2059,19 @@ function appendResultRow(r, idx) {
     <td class="mono" title="${escHtml(ans)}">${escHtml(ansDisplay)}</td>
     <td class="${scoreCls}">${scoreTxt}</td>
     <td>${correctTxt}</td>
+    <td class="view-col"></td>
   `;
+
+  if (gradedIdx >= 0) {
+    const btn = document.createElement('button');
+    btn.className = 'btn-view-image';
+    btn.type      = 'button';
+    btn.title     = `View image for sheet ${idx}`;
+    btn.textContent = '🔍';
+    btn.addEventListener('click', () => navigateToGradedSheet(gradedIdx));
+    tr.lastElementChild.appendChild(btn);
+  }
+
   resultsTbody.appendChild(tr);
 }
 
