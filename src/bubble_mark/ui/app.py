@@ -1,11 +1,17 @@
 """BubbleMarkApp – main Toga application class."""
 from __future__ import annotations
 
+import logging
+
 import toga
+from toga.style import Pack
+from toga.style.pack import COLUMN
 
 from bubble_mark.models.answer_key import AnswerKey
 from bubble_mark.models.grade_result import GradeResult
 from bubble_mark.models.settings import AppSettings
+
+logger = logging.getLogger(__name__)
 
 
 class BubbleMarkApp(toga.App):
@@ -17,9 +23,39 @@ class BubbleMarkApp(toga.App):
         self.answer_key: AnswerKey | None = None
         self.results: list[GradeResult] = []
 
+        # ── Logging handler (captures records from all modules) ───────────
+        from bubble_mark.ui.log_handler import StatusBarHandler
+        self._log_handler = StatusBarHandler()
+        self._log_handler.setFormatter(
+            logging.Formatter("%(levelname)s %(name)s: %(message)s")
+        )
+        root_logger = logging.getLogger()
+        root_logger.addHandler(self._log_handler)
+        # Only configure the root level when it is still at NOTSET (the Python
+        # default).  If the caller has already configured logging we leave it
+        # alone; INFO is enough to make the status bar useful without flooding
+        # production logs with DEBUG noise.
+        if root_logger.level == logging.NOTSET:
+            root_logger.setLevel(logging.INFO)
+
+        # ── Status bar (collapsible log drawer) ───────────────────────────
+        from bubble_mark.ui.status_bar import LogStatusBar
+        self._status_bar = LogStatusBar(self, self._log_handler)
+
+        # ── Persistent wrapper layout ─────────────────────────────────────
+        # The wrapper stays as main_window.content for the lifetime of the
+        # app.  Only the _screen_area portion is swapped during navigation.
+        self._screen_area = toga.Box(style=Pack(direction=COLUMN, flex=1))
+        self._current_screen: toga.Box | None = None
+        self._wrapper = toga.Box(style=Pack(direction=COLUMN, flex=1))
+        self._wrapper.add(self._screen_area, self._status_bar.widget)
+
         self.main_window = toga.MainWindow(title=self.formal_name)
-        self.main_window.content = self._build_home()
+        self.main_window.content = self._wrapper
+        self._set_screen(self._build_home())
         self.main_window.show()
+
+        logger.info("BubbleMarkApp started.")
 
         # Schedule update check 2 s after startup (daemon thread so it
         # doesn't keep the process alive on shutdown)
@@ -56,17 +92,25 @@ class BubbleMarkApp(toga.App):
     # Navigation helpers
     # ------------------------------------------------------------------
 
+    def _set_screen(self, screen: toga.Box) -> None:
+        """Replace the current screen in the persistent wrapper layout."""
+        screen.style.flex = 1
+        if self._current_screen is not None:
+            self._screen_area.remove(self._current_screen)
+        self._current_screen = screen
+        self._screen_area.add(screen)
+
     def go_home(self) -> None:
-        self.main_window.content = self._build_home()
+        self._set_screen(self._build_home())
 
     def go_camera(self) -> None:
-        self.main_window.content = self._build_camera()
+        self._set_screen(self._build_camera())
 
     def go_settings(self) -> None:
-        self.main_window.content = self._build_settings()
+        self._set_screen(self._build_settings())
 
     def go_results(self) -> None:
-        self.main_window.content = self._build_results()
+        self._set_screen(self._build_results())
 
 
 def main() -> BubbleMarkApp:
