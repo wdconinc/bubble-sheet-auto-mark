@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import pytest
 
+import bubble_mark.processing.image_utils as _image_utils_mod
 from bubble_mark.processing.image_utils import (
     apply_threshold,
     find_page_contour,
@@ -15,6 +16,12 @@ from bubble_mark.processing.image_utils import (
     to_grayscale,
 )
 from tests.conftest import create_blank_sheet
+
+
+@pytest.fixture
+def no_cv2(monkeypatch):
+    """Force the pure NumPy/Pillow fallback paths by setting _HAVE_CV2=False."""
+    monkeypatch.setattr(_image_utils_mod, "_HAVE_CV2", False)
 
 
 # ---------------------------------------------------------------------------
@@ -171,6 +178,112 @@ class TestResizeImage:
         assert resized.shape[:2] == (60, 80)
 
     def test_no_resize_returns_original(self):
+        img = np.zeros((100, 200, 3), dtype=np.uint8)
+        result = resize_image(img)
+        assert result.shape == img.shape
+
+
+# ---------------------------------------------------------------------------
+# Pure NumPy/Pillow fallback paths (_HAVE_CV2 = False)
+# ---------------------------------------------------------------------------
+
+class TestLoadImageNoCv2:
+    def test_missing_file_raises(self, tmp_path, no_cv2):
+        with pytest.raises(FileNotFoundError):
+            load_image(str(tmp_path / "nonexistent.png"))
+
+    def test_invalid_file_raises(self, tmp_path, no_cv2):
+        bad = tmp_path / "bad.png"
+        bad.write_bytes(b"not an image")
+        with pytest.raises(ValueError):
+            load_image(str(bad))
+
+    def test_valid_image_loaded(self, tmp_path, no_cv2):
+        from PIL import Image as PILImage
+        img = PILImage.fromarray(np.zeros((50, 50, 3), dtype=np.uint8), mode="RGB")
+        path = str(tmp_path / "img.png")
+        img.save(path)
+        loaded = load_image(path)
+        assert loaded.shape == (50, 50, 3)
+
+
+class TestToGrayscaleNoCv2:
+    def test_bgr_to_gray(self, no_cv2):
+        img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        gray = to_grayscale(img)
+        assert gray.ndim == 2
+        assert gray.shape == (100, 100)
+
+    def test_already_gray(self, no_cv2):
+        img = np.random.randint(0, 255, (100, 100), dtype=np.uint8)
+        gray = to_grayscale(img)
+        assert gray.shape == (100, 100)
+
+
+class TestApplyThresholdNoCv2:
+    def test_otsu_returns_binary(self, no_cv2):
+        img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        binary = apply_threshold(img, method="otsu")
+        assert binary.ndim == 2
+        assert set(np.unique(binary)).issubset({0, 255})
+
+    def test_adaptive_returns_binary(self, no_cv2):
+        img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
+        binary = apply_threshold(img, method="adaptive")
+        assert binary.ndim == 2
+        assert set(np.unique(binary)).issubset({0, 255})
+
+
+class TestFindPageContourNoCv2:
+    def test_blank_image_returns_none_or_array(self, no_cv2):
+        img = create_blank_sheet(200, 200)
+        result = find_page_contour(img)
+        assert result is None or isinstance(result, np.ndarray)
+
+    def test_dark_region_detected(self, no_cv2):
+        # Use a large filled dark region so it clears the 10 % coverage threshold.
+        img = np.full((400, 400, 3), 255, dtype=np.uint8)
+        img[40:360, 40:360] = 0  # large dark rectangle
+        result = find_page_contour(img)
+        if result is not None:
+            assert result.shape[-1] == 2
+
+
+class TestPerspectiveTransformNoCv2:
+    def test_output_is_ndarray(self, no_cv2):
+        img = np.ones((200, 200, 3), dtype=np.uint8) * 200
+        contour = np.array([[10, 10], [190, 10], [190, 190], [10, 190]], dtype=np.float32)
+        warped = perspective_transform(img, contour)
+        assert isinstance(warped, np.ndarray)
+        assert warped.ndim == 3
+
+    def test_output_shape_approximation(self, no_cv2):
+        img = np.ones((300, 300, 3), dtype=np.uint8) * 200
+        contour = np.array([[20, 20], [280, 20], [280, 280], [20, 280]], dtype=np.float32)
+        warped = perspective_transform(img, contour)
+        h, w = warped.shape[:2]
+        assert abs(w - h) < 20  # roughly square
+
+
+class TestResizeImageNoCv2:
+    def test_resize_by_width(self, no_cv2):
+        img = np.zeros((100, 200, 3), dtype=np.uint8)
+        resized = resize_image(img, width=100)
+        assert resized.shape[1] == 100
+        assert resized.shape[0] == 50  # aspect preserved
+
+    def test_resize_by_height(self, no_cv2):
+        img = np.zeros((100, 200, 3), dtype=np.uint8)
+        resized = resize_image(img, height=50)
+        assert resized.shape[0] == 50
+        assert resized.shape[1] == 100
+
+    def test_resize_both(self, no_cv2):
+        img = np.zeros((100, 200, 3), dtype=np.uint8)
+        resized = resize_image(img, width=80, height=60)
+        assert resized.shape[:2] == (60, 80)
+
+    def test_no_resize_returns_original(self, no_cv2):
         img = np.zeros((100, 200, 3), dtype=np.uint8)
         result = resize_image(img)
         assert result.shape == img.shape

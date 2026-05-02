@@ -27,12 +27,35 @@ def _is_android() -> bool:
     return sys.platform == "android" or "ANDROID_DATA" in __import__("os").environ
 
 
+# When cv2 is absent, overlay detection runs every Nth frame to reduce CPU load.
+_OVERLAY_SKIP_FRAMES = 5
+_overlay_frame_count: int = 0
+_overlay_cached_result: "np.ndarray | None" = None
+
+
 def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
     """Return a copy of *rgb* with a green page-contour overlay if found.
 
     Works with or without OpenCV.  When cv2 is available the contour is drawn
     directly on a BGR copy; otherwise the Pillow ImageDraw API is used.
+
+    When cv2 is absent, contour detection is CPU-intensive so results are
+    cached and refreshed only every ``_OVERLAY_SKIP_FRAMES`` frames.
     """
+    global _overlay_frame_count, _overlay_cached_result
+
+    try:
+        import cv2 as _cv2
+        _have_cv2_local = True
+    except ImportError:
+        _have_cv2_local = False
+
+    # Throttle the expensive pure-NumPy/Pillow detection path.
+    if not _have_cv2_local:
+        _overlay_frame_count += 1
+        if _overlay_frame_count % _OVERLAY_SKIP_FRAMES != 0:
+            return _overlay_cached_result if _overlay_cached_result is not None else rgb
+
     try:
         from bubble_mark.processing.image_utils import find_page_contour
         bgr = rgb[:, :, ::-1].copy()  # RGB → BGR (pure numpy, no cv2 needed)
@@ -40,23 +63,23 @@ def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
         if contour is None:
             return rgb
 
-        try:
-            import cv2
-            cv2.drawContours(bgr, [contour], -1, (0, 255, 0), 3)
+        if _have_cv2_local:
+            _cv2.drawContours(bgr, [contour], -1, (0, 255, 0), 3)
             return bgr[:, :, ::-1].copy()  # BGR → RGB
-        except ImportError:
-            # Pillow fallback: draw the 4-sided polygon on the RGB image.
-            from PIL import Image as PILImage, ImageDraw
-            pts = contour.reshape(4, 2)
-            poly = [(int(x), int(y)) for x, y in pts]
-            pil = PILImage.fromarray(rgb.copy())
-            draw = ImageDraw.Draw(pil)
-            draw.polygon(poly, outline=(0, 255, 0))
-            # Draw a thicker border by drawing multiple times with slight offsets.
-            for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2)]:
-                shifted = [(x + dx, y + dy) for x, y in poly]
-                draw.polygon(shifted, outline=(0, 255, 0))
-            return np.array(pil)
+        # Pillow fallback: draw the 4-sided polygon on the RGB image.
+        from PIL import Image as PILImage, ImageDraw
+        pts = contour.reshape(4, 2)
+        poly = [(int(x), int(y)) for x, y in pts]
+        pil = PILImage.fromarray(rgb.copy())
+        draw = ImageDraw.Draw(pil)
+        draw.polygon(poly, outline=(0, 255, 0))
+        # Draw a thicker border by drawing multiple times with slight offsets.
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2)]:
+            shifted = [(x + dx, y + dy) for x, y in poly]
+            draw.polygon(shifted, outline=(0, 255, 0))
+        result = np.array(pil)
+        _overlay_cached_result = result
+        return result
     except Exception:
         return rgb
 
@@ -132,7 +155,8 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
                 return
             try:
                 from PIL import Image as PILImage
-                pil = PILImage.open(str(result)).convert("RGB")
+                with PILImage.open(str(result)) as img:
+                    pil = img.convert("RGB")
                 rgb = np.array(pil, dtype=np.uint8)
                 _on_frame(rgb)
                 status_label.text = f"Loaded: {result.name}"

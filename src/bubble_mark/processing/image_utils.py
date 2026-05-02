@@ -98,7 +98,8 @@ def load_image(path: str) -> np.ndarray:
         return image
     from PIL import Image as PILImage, UnidentifiedImageError
     try:
-        pil = PILImage.open(path).convert("RGB")
+        with PILImage.open(path) as pil_raw:
+            pil = pil_raw.convert("RGB")
     except (UnidentifiedImageError, OSError) as exc:
         raise ValueError(f"Could not decode image: {path}") from exc
     # Convert RGB → BGR to match cv2 convention.
@@ -256,7 +257,6 @@ def perspective_transform(image: np.ndarray, contour: np.ndarray) -> np.ndarray:
     is_color = image.ndim == 3 and image.shape[2] >= 3
     if is_color:
         pil = PILImage.fromarray(image[:, :, ::-1].astype(np.uint8))  # BGR → RGB
-        result = PILImage.new("RGB", (width, height))
         result = pil.transform((width, height), PILImage.PERSPECTIVE, coeffs, PILImage.BICUBIC)
         return np.array(result)[:, :, ::-1].copy()  # RGB → BGR
     pil = PILImage.fromarray(image.astype(np.uint8))
