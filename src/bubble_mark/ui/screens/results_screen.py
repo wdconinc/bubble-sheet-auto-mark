@@ -43,6 +43,7 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
             _show_annotated = True
         except (ImportError, ValueError, OSError) as exc:
             import logging
+
             logging.getLogger(__name__).warning(
                 "Could not render annotated image: %s", exc
             )
