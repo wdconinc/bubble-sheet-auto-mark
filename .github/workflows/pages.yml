@@ -45,6 +45,20 @@ jobs:
       - name: Copy Python package for Pyodide web app
         run: cp -r src/bubble_mark _site/app/bubble_mark
 
+      - name: Generate version.json for web app status bar
+        run: |
+          python3 - <<'EOF'
+          import json, subprocess, pathlib
+          def git(*args):
+              return subprocess.check_output(['git'] + list(args), text=True).strip()
+          data = {
+              'hash':    git('rev-parse', 'HEAD'),
+              'tag':     git('tag', '--points-at', 'HEAD') or '',
+              'message': git('log', '-1', '--format=%s'),
+          }
+          pathlib.Path('_site/app/version.json').write_text(json.dumps(data))
+          EOF
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
