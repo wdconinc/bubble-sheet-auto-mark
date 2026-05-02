@@ -135,6 +135,55 @@ def detect_bubble_grid(
     return grid
 
 
+def detect_grid_lines(
+    region_image: np.ndarray,
+    num_rows: int,
+    num_cols: int,
+) -> Optional[tuple[list[int], list[int]]]:
+    """Return the snapped grid-line pixel positions for a bubble region.
+
+    Parameters
+    ----------
+    region_image:
+        Cropped section of the normalised sheet that contains the bubbles
+        (BGR or grayscale NumPy array).
+    num_rows:
+        Expected number of bubble rows.
+    num_cols:
+        Expected number of bubble columns.
+
+    Returns
+    -------
+    tuple[list[int], list[int]] or None
+        ``(row_ys, col_xs)`` — two sorted lists of pixel positions giving the
+        ``num_rows + 1`` horizontal and ``num_cols + 1`` vertical grid-line
+        positions in the coordinate space of *region_image*.  Returns *None*
+        if not enough lines could be detected.
+    """
+    from bubble_mark.processing.color_channel import (
+        enhance_contrast,
+        extract_print_channel,
+    )
+
+    ch = extract_print_channel(region_image)
+    enhanced = enhance_contrast(ch)
+
+    h, w = enhanced.shape[:2]
+
+    h_lines, v_lines = _detect_lines(enhanced)
+
+    if len(h_lines) < num_rows + 1 or len(v_lines) < num_cols + 1:
+        return None
+
+    row_ys = _snap_to_grid(h_lines, num_rows + 1, h)
+    col_xs = _snap_to_grid(v_lines, num_cols + 1, w)
+
+    if len(row_ys) < 2 or len(col_xs) < 2:
+        return None
+
+    return row_ys, col_xs
+
+
 def detect_block_groups(
     lines: dict[str, list[int]],
     num_rows: int,

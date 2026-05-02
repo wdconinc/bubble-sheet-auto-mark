@@ -304,6 +304,27 @@
       margin-top: 8px;
     }
 
+    /* ── Reference sheet setup steps ── */
+    .ref-step-label {
+      font-size: .8rem; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: .04em;
+      padding-top: 12px; border-top: 1px solid var(--border); margin: 12px 0 6px;
+    }
+    #ref-edge-panel .ref-step-label { border-top: none; padding-top: 0; margin-top: 0; }
+    .ref-step-hint { font-size: .8rem; color: var(--muted); min-height: 1.2em; }
+    .ref-color-info {
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; padding: 10px 12px; font-size: .85rem; line-height: 1.6;
+    }
+    .ref-color-info table { border-collapse: collapse; margin-top: 4px; width: 100%; }
+    .ref-color-info td { padding: 1px 10px 1px 0; font-size: .8rem; }
+    .ref-color-info td:first-child { font-weight: 500; min-width: 54px; }
+    /* Edge-line drawing cursor */
+    #ref-canvas.mode-edge-top,
+    #ref-canvas.mode-edge-bottom,
+    #ref-canvas.mode-edge-left,
+    #ref-canvas.mode-edge-right { cursor: crosshair; border-color: #7c3aed; }
+
     /* ── Graded-sheets tab bar ── */
     #graded-tabs-section { margin-top: 12px; }
     #graded-tabs-bar {
@@ -437,23 +458,62 @@
           <input type="file" id="ref-file-input" accept="image/*" hidden>
           <button class="btn-ghost" id="btn-ref-clear" type="button" style="display:none">🗑 Clear Regions</button>
         </div>
-        <div class="field" style="max-width:220px;margin-bottom:10px">
-          <label for="ref-color-channel">Reference color channel</label>
-          <select id="ref-color-channel">
-            <option value="0">Blue (0)</option>
-            <option value="1" selected>Green (1)</option>
-            <option value="2">Red (2)</option>
-          </select>
-        </div>
-
         <div id="ref-canvas-section" style="display:none">
-          <div class="btn-row" style="margin-top:10px">
-            <button class="btn-ghost" id="btn-draw-answer" type="button">✏ Draw Answer Region</button>
-            <button class="btn-ghost" id="btn-draw-id" type="button">✏ Draw ID Region</button>
-            <button class="btn-ghost" id="btn-clear-answer" type="button">✕ Clear Answer</button>
-            <button class="btn-ghost" id="btn-clear-id" type="button">✕ Clear ID</button>
+
+          <!-- ── Step 1: Define page edges ── -->
+          <div id="ref-edge-panel">
+            <p class="ref-step-label">Step 1: Define page edges for distortion correction</p>
+            <div class="btn-row">
+              <button class="btn-ghost" id="btn-edge-top"    type="button" data-edge="top">▲ Top Edge</button>
+              <button class="btn-ghost" id="btn-edge-bottom" type="button" data-edge="bottom">▼ Bottom Edge</button>
+              <button class="btn-ghost" id="btn-edge-left"   type="button" data-edge="left">◄ Left Edge</button>
+              <button class="btn-ghost" id="btn-edge-right"  type="button" data-edge="right">► Right Edge</button>
+              <button class="btn-ghost" id="btn-edge-clear"  type="button">✕ Clear Lines</button>
+            </div>
+            <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
+            <div class="btn-row" style="margin-top:6px">
+              <button class="btn-ghost"   id="btn-auto-detect-edges"  type="button">🔍 Auto-detect Edges</button>
+              <button class="btn-primary" id="btn-apply-correction"   type="button" disabled>✓ Apply Distortion Correction →</button>
+            </div>
           </div>
-          <div id="ref-mode-hint">Select a mode above, then drag a rectangle on the sheet preview.</div>
+
+          <!-- ── Step 2: Color channel analysis ── -->
+          <div id="ref-color-panel" style="display:none">
+            <p class="ref-step-label">Step 2: Color channel analysis</p>
+            <div id="ref-color-info" class="ref-color-info">Run distortion correction first.</div>
+            <div class="field" style="max-width:240px;margin-top:10px">
+              <label for="ref-color-channel">Color channel (override auto-detection)</label>
+              <select id="ref-color-channel">
+                <option value="0">Blue (0)</option>
+                <option value="1" selected>Green (1)</option>
+                <option value="2">Red (2)</option>
+              </select>
+            </div>
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn-ghost"   id="btn-back-to-edges"  type="button">← Edit Edges</button>
+              <button class="btn-primary" id="btn-show-enhanced"  type="button">🎨 Show Enhanced Image →</button>
+            </div>
+          </div>
+
+          <!-- ── Step 3: Region selection & grid detection ── -->
+          <div id="ref-region-panel" style="display:none">
+            <p class="ref-step-label">Step 3: Select bubble regions and detect grid</p>
+            <div class="btn-row">
+              <button class="btn-ghost" id="btn-back-to-color" type="button">← Edit Color</button>
+              <button class="btn-ghost" id="btn-detect-grid"   type="button" disabled>🔍 Detect Grid Lines</button>
+            </div>
+          </div>
+
+          <!-- ── Region draw controls (always visible when canvas is shown) ── -->
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn-ghost" id="btn-draw-answer"  type="button">✏ Draw Answer Region</button>
+            <button class="btn-ghost" id="btn-draw-id"      type="button">✏ Draw ID Region</button>
+            <button class="btn-ghost" id="btn-clear-answer" type="button">✕ Clear Answer</button>
+            <button class="btn-ghost" id="btn-clear-id"     type="button">✕ Clear ID</button>
+          </div>
+
+          <!-- ── Shared canvas ── -->
+          <div id="ref-mode-hint" class="ref-step-hint" style="margin-top:6px">Select a mode above, then drag on the image.</div>
           <div id="ref-canvas-wrap">
             <canvas id="ref-canvas"></canvas>
           </div>
@@ -724,6 +784,172 @@ def detect_contour(image_bytes_js):
         return 'null'
     pts = [[int(x), int(y)] for x, y in contour.reshape(4, 2).tolist()]
     return json.dumps({'contour': pts})
+
+
+def process_reference_image(image_bytes_js, edge_lines_json='null'):
+    """Correct perspective distortion and analyse color channels of a reference sheet.
+
+    Parameters
+    ----------
+    image_bytes_js : JsProxy[Uint8Array]
+        Raw reference-sheet image bytes (JPEG / PNG / BMP).
+    edge_lines_json : str
+        JSON list of four ``[x1, y1, x2, y2]`` edge lines in the original
+        image pixel coordinate space, or ``'null'`` / ``'[]'`` to use
+        automatic page-contour detection instead.
+
+    Returns a JSON string with keys:
+        corrected_image_b64  – PNG of the perspective-corrected image (base64)
+        enhanced_image_b64   – PNG of the contrast-enhanced single-channel image
+        best_channel         – 0 / 1 / 2  (B / G / R), auto-selected
+        channel_variances    – [var_B, var_G, var_R]
+        width, height        – int dimensions of the corrected image
+    Or the string ``'null'`` on failure.
+    """
+    import base64
+    from bubble_mark.processing.color_channel import extract_print_channel, enhance_contrast
+    from bubble_mark.processing.image_utils import find_page_contour, perspective_transform
+
+    try:
+        data = image_bytes_js.to_py()
+        pil  = PILImage.open(io.BytesIO(data)).convert('RGB')
+        rgb  = np.array(pil, dtype=np.uint8)
+        bgr  = rgb[:, :, ::-1].copy()
+
+        edge_lines = json.loads(str(edge_lines_json))
+
+        def _apply_correction(img, lines):
+            if lines and len(lines) == 4:
+                from bubble_mark.processing.distortion import correct_distortion_from_lines
+                result = correct_distortion_from_lines(img, lines)
+                if result is not None:
+                    return result
+            contour = find_page_contour(img)
+            if contour is not None:
+                return perspective_transform(img, contour)
+            return img
+
+        corrected = _apply_correction(bgr, edge_lines)
+
+        variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
+        best_channel = int(np.argmax(variances))
+        channel      = extract_print_channel(corrected, best_channel)
+        enhanced     = enhance_contrast(channel)
+
+        def _to_b64(arr, mode='BGR'):
+            if mode == 'BGR':
+                pil_img = PILImage.fromarray(arr[:, :, ::-1].astype(np.uint8), 'RGB')
+            else:
+                pil_img = PILImage.fromarray(arr.astype(np.uint8), 'L')
+            buf = io.BytesIO()
+            pil_img.save(buf, format='PNG')
+            return base64.b64encode(buf.getvalue()).decode('ascii')
+
+        return json.dumps({
+            'corrected_image_b64': _to_b64(corrected, 'BGR'),
+            'enhanced_image_b64':  _to_b64(enhanced,  'L'),
+            'best_channel':        best_channel,
+            'channel_variances':   variances,
+            'width':               int(corrected.shape[1]),
+            'height':              int(corrected.shape[0]),
+        })
+    except Exception:
+        return 'null'
+
+
+def enhance_reference_channel(corrected_image_b64_str, channel):
+    """Re-enhance the corrected reference image using the specified channel.
+
+    Parameters
+    ----------
+    corrected_image_b64_str : str
+        Base-64 PNG of the perspective-corrected reference image (as returned
+        by *process_reference_image*).
+    channel : int
+        BGR channel index (0 = Blue, 1 = Green, 2 = Red).
+
+    Returns a JSON string ``{"enhanced_image_b64": "…"}`` or ``'null'``.
+    """
+    import base64
+    from bubble_mark.processing.color_channel import extract_print_channel, enhance_contrast
+
+    try:
+        img_data = base64.b64decode(str(corrected_image_b64_str))
+        pil  = PILImage.open(io.BytesIO(img_data)).convert('RGB')
+        rgb  = np.array(pil, dtype=np.uint8)
+        bgr  = rgb[:, :, ::-1].copy()
+
+        ch       = extract_print_channel(bgr, int(channel))
+        enhanced = enhance_contrast(ch)
+
+        pil_e = PILImage.fromarray(enhanced.astype(np.uint8), 'L')
+        buf   = io.BytesIO()
+        pil_e.save(buf, format='PNG')
+        return json.dumps({
+            'enhanced_image_b64': base64.b64encode(buf.getvalue()).decode('ascii'),
+        })
+    except Exception:
+        return 'null'
+
+
+def detect_reference_grid(corrected_image_b64_str, answer_region_json, id_region_json,
+                           num_questions, num_choices, num_id_digits):
+    """Detect grid lines inside the answer and ID regions of the reference image.
+
+    Parameters
+    ----------
+    corrected_image_b64_str : str
+        Base-64 PNG of the corrected reference image.
+    answer_region_json, id_region_json : str
+        JSON ``[x1, y1, x2, y2]`` (normalised 0–1) or ``'null'``.
+    num_questions, num_choices, num_id_digits : int
+        Sheet layout parameters.
+
+    Returns a JSON string with optional keys:
+        answer_lines_h, answer_lines_v – sorted pixel positions in the
+            corrected-image coordinate space for the answer region.
+        id_lines_h, id_lines_v         – same for the ID region.
+    """
+    import base64
+    from bubble_mark.processing.grid_detection import detect_grid_lines
+
+    try:
+        img_data = base64.b64decode(str(corrected_image_b64_str))
+        pil  = PILImage.open(io.BytesIO(img_data)).convert('RGB')
+        rgb  = np.array(pil, dtype=np.uint8)
+        bgr  = rgb[:, :, ::-1].copy()
+        H, W = bgr.shape[:2]
+
+        def _region_lines(region_json_str, num_rows, num_cols):
+            region = json.loads(str(region_json_str))
+            if not region:
+                return None
+            x1, y1, x2, y2 = region
+            ix1, iy1 = int(x1 * W), int(y1 * H)
+            ix2, iy2 = int(x2 * W), int(y2 * H)
+            if ix2 <= ix1 or iy2 <= iy1:
+                return None
+            roi    = bgr[iy1:iy2, ix1:ix2]
+            result = detect_grid_lines(roi, int(num_rows), int(num_cols))
+            if result is None:
+                return None
+            row_ys, col_xs = result
+            # Offset local ROI coordinates back into full corrected-image space
+            h_lines = [iy1 + y for y in row_ys]
+            v_lines = [ix1 + x for x in col_xs]
+            return h_lines, v_lines
+
+        out = {}
+        ans = _region_lines(answer_region_json, int(num_questions), int(num_choices))
+        if ans:
+            out['answer_lines_h'], out['answer_lines_v'] = ans
+        idr = _region_lines(id_region_json, 10, int(num_id_digits))
+        if idr:
+            out['id_lines_h'], out['id_lines_v'] = idr
+
+        return json.dumps(out)
+    except Exception:
+        return 'null'
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────
@@ -763,6 +989,9 @@ let pyodide        = null;
 let gradeSheetFn   = null;   // Python callable, kept alive for the session
 let buildCsvFn     = null;
 let detectContourFn = null;  // Python callable for live page-contour detection
+let processRefImageFn   = null;  // Python callable for reference-sheet processing
+let enhanceRefChannelFn = null;  // Python callable for channel re-enhancement
+let detectRefGridFn     = null;  // Python callable for grid-line detection
 let results        = [];     // accumulated GradeResult dicts
 let pendingFiles   = [];     // [{name, bytes}] – images queued for grading
 let gradedSheets   = [];     // [{name, bytes, result, annotatedB64}] – in-memory graded results
@@ -775,13 +1004,31 @@ let captureSession = 0;   // incremented when camera stops; invalidates in-fligh
 const ID_CHOICES_PER_DIGIT = 10;
 
 // Reference-sheet region state
-let refImageEl     = null;   // HTMLImageElement for the uploaded blank sheet
+let refImageEl     = null;   // HTMLImageElement currently shown on refCanvas
 let drawMode       = null;   // 'answer' | 'id' | null
 let answerRegion   = null;   // [x1, y1, x2, y2] normalised 0-1, or null
 let idRegion       = null;   // [x1, y1, x2, y2] normalised 0-1, or null
 let drawStart      = null;   // {x, y} in canvas pixels
 let drawCurrent    = null;   // {x, y} in canvas pixels
 let isDrawing      = false;
+
+// Reference-sheet multi-step workflow state
+let refStep             = 0;     // 0=raw/edges, 1=corrected/color, 2=enhanced/regions
+let refRawImageEl       = null;  // raw uploaded image element
+let refCorrectedImageEl = null;  // perspective-corrected image element
+let refEnhancedImageEl  = null;  // contrast-enhanced (grayscale) image element
+let refCorrectedImageB64 = null; // base64 PNG of corrected image (passed back to Python)
+let refBestChannel      = 1;
+let refChannelVariances = null;
+let refGridLinesData    = null;  // {answer_lines_h, answer_lines_v, id_lines_h, id_lines_v}
+
+// Edge-line drawing state
+// refEdgeLines values are [x1,y1,x2,y2] in ORIGINAL IMAGE pixel coordinates
+let refEdgeLines  = { top: null, bottom: null, left: null, right: null };
+let edgeDrawMode  = null;     // 'top'|'bottom'|'left'|'right'|null
+let isEdgeDrawing = false;
+let edgeDrawStart   = null;   // {x, y} in canvas pixels
+let edgeDrawCurrent = null;   // {x, y} in canvas pixels
 
 // ── DOM ──────────────────────────────────────────────────────────────────────
 
@@ -824,6 +1071,20 @@ const btnDrawAnswer   = $('btn-draw-answer');
 const btnDrawId       = $('btn-draw-id');
 const btnClearAnswer  = $('btn-clear-answer');
 const btnClearId      = $('btn-clear-id');
+
+// Reference-sheet workflow step elements
+const refEdgePanel     = $('ref-edge-panel');
+const refColorPanel    = $('ref-color-panel');
+const refRegionPanel   = $('ref-region-panel');
+const btnEdgeClear     = $('btn-edge-clear');
+const btnAutoEdges     = $('btn-auto-detect-edges');
+const btnApplyCorr     = $('btn-apply-correction');
+const refEdgeStatus    = $('ref-edge-status');
+const refColorInfo     = $('ref-color-info');
+const btnBackToEdges   = $('btn-back-to-edges');
+const btnShowEnhanced  = $('btn-show-enhanced');
+const btnBackToColor   = $('btn-back-to-color');
+const btnDetectGrid    = $('btn-detect-grid');
 
 // Graded-sheet tab elements
 const pendingInfo       = $('pending-info');
@@ -870,6 +1131,7 @@ async function init() {
   // before Pyodide starts loading, so the UI reflects persisted values.
   restoreSettings();
   restoreRegions();
+  restoreEdgeLines();
   restoreResults();
 
   // Open IndexedDB and restore persisted images (fail silently if unavailable).
@@ -894,9 +1156,12 @@ async function init() {
     await pyodide.runPythonAsync(setupCode);
 
     // Keep references to the Python callables for the session lifetime.
-    gradeSheetFn    = pyodide.globals.get('grade_sheet');
-    buildCsvFn      = pyodide.globals.get('build_csv');
-    detectContourFn = pyodide.globals.get('detect_contour');
+    gradeSheetFn        = pyodide.globals.get('grade_sheet');
+    buildCsvFn          = pyodide.globals.get('build_csv');
+    detectContourFn     = pyodide.globals.get('detect_contour');
+    processRefImageFn   = pyodide.globals.get('process_reference_image');
+    enhanceRefChannelFn = pyodide.globals.get('enhance_reference_channel');
+    detectRefGridFn     = pyodide.globals.get('detect_reference_grid');
 
     setLoadingMsg('Ready!');
     await new Promise((r) => setTimeout(r, 300));
@@ -1185,6 +1450,7 @@ const LS_SETTINGS      = 'bsam_settings';
 const LS_ANSWER_REGION = 'bsam_answer_region';
 const LS_ID_REGION     = 'bsam_id_region';
 const LS_RESULTS       = 'bsam_results';
+const LS_EDGE_LINES    = 'bsam_edge_lines';
 
 const IDB_DB_NAME    = 'bubble-sheet-auto-mark';
 const IDB_STORE_NAME = 'blobs';
@@ -1266,6 +1532,31 @@ function saveRegions() {
     localStorage.setItem(LS_ANSWER_REGION, JSON.stringify(answerRegion));
     localStorage.setItem(LS_ID_REGION,     JSON.stringify(idRegion));
   } catch (_) {}
+  updateDetectGridBtn();
+}
+
+function saveEdgeLines() {
+  try {
+    localStorage.setItem(LS_EDGE_LINES, JSON.stringify(refEdgeLines));
+  } catch (_) {}
+}
+
+function restoreEdgeLines() {
+  try {
+    const raw = localStorage.getItem(LS_EDGE_LINES);
+    if (!raw) return;
+    const el = JSON.parse(raw);
+    if (el && typeof el === 'object') {
+      refEdgeLines = {
+        top:    Array.isArray(el.top)    ? el.top    : null,
+        bottom: Array.isArray(el.bottom) ? el.bottom : null,
+        left:   Array.isArray(el.left)   ? el.left   : null,
+        right:  Array.isArray(el.right)  ? el.right  : null,
+      };
+      updateApplyCorrectionBtn();
+      updateEdgeStatus();
+    }
+  } catch (_) {}
 }
 
 function saveResults() {
@@ -1318,14 +1609,10 @@ async function restoreRefImage() {
     await new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
-        const maxW  = refCanvas.parentElement.clientWidth || 600;
-        const scale = Math.min(1, maxW / img.naturalWidth);
-        refCanvas.width  = Math.round(img.naturalWidth  * scale);
-        refCanvas.height = Math.round(img.naturalHeight * scale);
-        refImageEl = img;
-        redrawRefCanvas();
+        refRawImageEl = img;
         refCanvasSection.style.display = 'block';
         btnRefClear.style.display = 'inline-flex';
+        setRefStep(0);
         URL.revokeObjectURL(url);
         resolve();
       };
@@ -1813,33 +2100,45 @@ refFileInput.addEventListener('change', (e) => {
   const url = URL.createObjectURL(file);
   const img = new Image();
   img.onload = () => {
-    // Fit the canvas to the container width while preserving aspect ratio.
-    const maxW = refCanvas.parentElement.clientWidth || 600;
-    const scale = Math.min(1, maxW / img.naturalWidth);
-    refCanvas.width  = Math.round(img.naturalWidth  * scale);
-    refCanvas.height = Math.round(img.naturalHeight * scale);
-    refImageEl = img;
-    redrawRefCanvas();
+    // Reset workflow state for a freshly uploaded image.
+    refCorrectedImageEl  = null;
+    refEnhancedImageEl   = null;
+    refCorrectedImageB64 = null;
+    refGridLinesData     = null;
+    refRawImageEl = img;
     refCanvasSection.style.display = 'block';
     btnRefClear.style.display = 'inline-flex';
+    setRefStep(0);
     URL.revokeObjectURL(url);
   };
   img.src = url;
 });
 
 btnRefClear.addEventListener('click', () => {
-  refImageEl  = null;
+  refImageEl           = null;
+  refRawImageEl        = null;
+  refCorrectedImageEl  = null;
+  refEnhancedImageEl   = null;
+  refCorrectedImageB64 = null;
+  refGridLinesData     = null;
+  refEdgeLines  = { top: null, bottom: null, left: null, right: null };
+  edgeDrawMode  = null;
+  isEdgeDrawing = false;
+  edgeDrawStart   = null;
+  edgeDrawCurrent = null;
   drawMode    = null;
   answerRegion = null;
   idRegion     = null;
   drawStart    = null;
   drawCurrent  = null;
   isDrawing    = false;
+  refStep = 0;
   refCanvasSection.style.display = 'none';
   btnRefClear.style.display = 'none';
   setDrawMode(null);
   idbDelete(IDB_KEY_REF).catch(() => {});
   saveRegions();
+  saveEdgeLines();
 });
 
 btnDrawAnswer.addEventListener('click', () => setDrawMode(drawMode === 'answer' ? null : 'answer'));
@@ -1849,6 +2148,16 @@ btnClearAnswer.addEventListener('click', () => { answerRegion = null; redrawRefC
 btnClearId.addEventListener('click',     () => { idRegion = null;     redrawRefCanvas(); saveRegions(); });
 
 function setDrawMode(mode) {
+  // Switching to a region-draw mode clears edge-draw mode.
+  edgeDrawMode    = null;
+  isEdgeDrawing   = false;
+  edgeDrawStart   = null;
+  edgeDrawCurrent = null;
+  ['top', 'bottom', 'left', 'right'].forEach(e => {
+    const b = $(`btn-edge-${e}`);
+    if (b) b.style.fontWeight = '';
+  });
+
   drawMode = mode;
   refCanvas.className = mode ? `mode-${mode}` : '';
   btnDrawAnswer.style.fontWeight = mode === 'answer' ? '700' : '';
@@ -1859,6 +2168,28 @@ function setDrawMode(mode) {
     refModeHint.textContent = 'Drag to draw the student-ID-bubbles region (orange).';
   } else {
     refModeHint.textContent = 'Select a mode above, then drag a rectangle on the sheet preview.';
+  }
+}
+
+function setEdgeDrawMode(edge) {
+  // Switching to edge-draw mode clears region-draw mode.
+  drawMode  = null;
+  isDrawing = false;
+  drawStart   = null;
+  drawCurrent = null;
+  btnDrawAnswer.style.fontWeight = '';
+  btnDrawId.style.fontWeight     = '';
+
+  edgeDrawMode = edge;
+  refCanvas.className = edge ? `mode-edge-${edge}` : '';
+  ['top', 'bottom', 'left', 'right'].forEach(e => {
+    const b = $(`btn-edge-${e}`);
+    if (b) b.style.fontWeight = (e === edge) ? '700' : '';
+  });
+  if (edge) {
+    refModeHint.textContent = `Drag to draw the ${edge} edge line (purple dashed).`;
+  } else {
+    refModeHint.textContent = 'Select an edge to draw, then drag a line on the image.';
   }
 }
 
@@ -1878,45 +2209,81 @@ function getCanvasPos(e) {
 }
 
 function onPointerDown(e) {
-  if (!drawMode || !refImageEl) return;
-  isDrawing   = true;
-  drawStart   = getCanvasPos(e);
-  drawCurrent = drawStart;
-  e.preventDefault();
+  if (!refImageEl) return;
+  if (edgeDrawMode) {
+    isEdgeDrawing   = true;
+    edgeDrawStart   = getCanvasPos(e);
+    edgeDrawCurrent = edgeDrawStart;
+    e.preventDefault();
+  } else if (drawMode) {
+    isDrawing   = true;
+    drawStart   = getCanvasPos(e);
+    drawCurrent = drawStart;
+    e.preventDefault();
+  }
 }
 
 function onPointerMove(e) {
-  if (!isDrawing) return;
-  drawCurrent = getCanvasPos(e);
-  redrawRefCanvas();
-  e.preventDefault();
+  if (isEdgeDrawing) {
+    edgeDrawCurrent = getCanvasPos(e);
+    redrawRefCanvas();
+    e.preventDefault();
+  } else if (isDrawing) {
+    drawCurrent = getCanvasPos(e);
+    redrawRefCanvas();
+    e.preventDefault();
+  }
 }
 
 function onPointerUp(e) {
-  if (!isDrawing) return;
-  isDrawing = false;
-  drawCurrent = getCanvasPos(e);
+  if (isEdgeDrawing) {
+    isEdgeDrawing   = false;
+    edgeDrawCurrent = getCanvasPos(e);
+    if (edgeDrawStart && edgeDrawCurrent && refRawImageEl) {
+      // Convert canvas coords → original image pixel coords
+      const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
+      const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
+      const ix1 = edgeDrawStart.x   * scaleX;
+      const iy1 = edgeDrawStart.y   * scaleY;
+      const ix2 = edgeDrawCurrent.x * scaleX;
+      const iy2 = edgeDrawCurrent.y * scaleY;
+      // Only store if the line segment is long enough to be meaningful.
+      if (Math.abs(ix2 - ix1) > 2 || Math.abs(iy2 - iy1) > 2) {
+        refEdgeLines[edgeDrawMode] = [ix1, iy1, ix2, iy2];
+        updateApplyCorrectionBtn();
+        updateEdgeStatus();
+        saveEdgeLines();
+      }
+    }
+    edgeDrawStart   = null;
+    edgeDrawCurrent = null;
+    redrawRefCanvas();
+    e.preventDefault();
+  } else if (isDrawing) {
+    isDrawing = false;
+    drawCurrent = getCanvasPos(e);
 
-  const rx1 = Math.max(0, Math.min(drawStart.x, drawCurrent.x) / refCanvas.width);
-  const ry1 = Math.max(0, Math.min(drawStart.y, drawCurrent.y) / refCanvas.height);
-  const rx2 = Math.min(1, Math.max(drawStart.x, drawCurrent.x) / refCanvas.width);
-  const ry2 = Math.min(1, Math.max(drawStart.y, drawCurrent.y) / refCanvas.height);
+    const rx1 = Math.max(0, Math.min(drawStart.x, drawCurrent.x) / refCanvas.width);
+    const ry1 = Math.max(0, Math.min(drawStart.y, drawCurrent.y) / refCanvas.height);
+    const rx2 = Math.min(1, Math.max(drawStart.x, drawCurrent.x) / refCanvas.width);
+    const ry2 = Math.min(1, Math.max(drawStart.y, drawCurrent.y) / refCanvas.height);
 
-  // Only store if the rectangle is non-degenerate
-  if (rx2 - rx1 > 0.01 && ry2 - ry1 > 0.01) {
-    const region = [
-      parseFloat(rx1.toFixed(4)), parseFloat(ry1.toFixed(4)),
-      parseFloat(rx2.toFixed(4)), parseFloat(ry2.toFixed(4)),
-    ];
-    if (drawMode === 'answer') answerRegion = region;
-    else if (drawMode === 'id') idRegion = region;
+    // Only store if the rectangle is non-degenerate
+    if (rx2 - rx1 > 0.01 && ry2 - ry1 > 0.01) {
+      const region = [
+        parseFloat(rx1.toFixed(4)), parseFloat(ry1.toFixed(4)),
+        parseFloat(rx2.toFixed(4)), parseFloat(ry2.toFixed(4)),
+      ];
+      if (drawMode === 'answer') answerRegion = region;
+      else if (drawMode === 'id') idRegion = region;
+    }
+
+    drawStart   = null;
+    drawCurrent = null;
+    redrawRefCanvas();
+    saveRegions();
+    e.preventDefault();
   }
-
-  drawStart   = null;
-  drawCurrent = null;
-  redrawRefCanvas();
-  saveRegions();
-  e.preventDefault();
 }
 
 refCanvas.addEventListener('mousedown',  onPointerDown);
@@ -1980,6 +2347,7 @@ function redrawRefCanvas() {
   refCtx.clearRect(0, 0, refCanvas.width, refCanvas.height);
   refCtx.drawImage(refImageEl, 0, 0, refCanvas.width, refCanvas.height);
 
+  // ── Draw region boxes and grid at all steps ───────────────────────────────
   function drawRegion(region, stroke, fill) {
     if (!region) return;
     const [x1, y1, x2, y2] = region;
@@ -1997,13 +2365,26 @@ function redrawRefCanvas() {
   drawRegion(answerRegion, '#2563eb', 'rgba(37,99,235,.18)');
   drawRegion(idRegion,     '#ea580c', 'rgba(234,88,12,.18)');
 
-  // Overlay grid lines so the user can verify the detected bubble layout.
-  // The ID region uses ID_CHOICES_PER_DIGIT rows, matching id_choices_per_digit.
+  // Arithmetic grid (always shown when regions exist and no detected lines yet)
   const s = getSettings();
-  drawGridLines(answerRegion, s.numQuestions, s.numChoices, '#2563eb');
-  drawGridLines(idRegion, ID_CHOICES_PER_DIGIT, s.numIdDigits, '#ea580c');
+  if (!refGridLinesData || !refGridLinesData.answer_lines_h) {
+    drawGridLines(answerRegion, s.numQuestions, s.numChoices, '#2563eb');
+  }
+  if (!refGridLinesData || !refGridLinesData.id_lines_h) {
+    drawGridLines(idRegion, ID_CHOICES_PER_DIGIT, s.numIdDigits, '#ea580c');
+  }
 
-  // Draw the live drag rectangle
+  // Detected grid lines (only shown at step 2)
+  if (refStep >= 2 && refGridLinesData) {
+    drawDetectedGridLines(refGridLinesData);
+  }
+
+  // ── Edge lines (only at step 0) ───────────────────────────────────────────
+  if (refStep === 0) {
+    drawEdgeLines();
+  }
+
+  // ── Live drag: region rectangle ───────────────────────────────────────────
   if (isDrawing && drawStart && drawCurrent && drawMode) {
     const stroke = drawMode === 'answer' ? '#2563eb' : '#ea580c';
     const fill   = drawMode === 'answer' ? 'rgba(37,99,235,.10)' : 'rgba(234,88,12,.10)';
@@ -2027,6 +2408,379 @@ function redrawRefCanvas() {
 ['num-questions', 'num-choices', 'num-id-digits'].forEach((id) => {
   $(id).addEventListener('input', () => { if (refImageEl) redrawRefCanvas(); });
 });
+
+// ── Reference sheet workflow helpers ─────────────────────────────────────────
+
+/** Fit the reference canvas to imgEl, preserving the container width. */
+function setRefCanvasFromImage(imgEl) {
+  const maxW  = refCanvas.parentElement.clientWidth || 600;
+  const scale = Math.min(1, maxW / imgEl.naturalWidth);
+  refCanvas.width  = Math.round(imgEl.naturalWidth  * scale);
+  refCanvas.height = Math.round(imgEl.naturalHeight * scale);
+  refImageEl = imgEl;
+}
+
+/**
+ * Switch between workflow steps 0 / 1 / 2.
+ *  0 = raw image + edge definition
+ *  1 = corrected image + color analysis
+ *  2 = enhanced image + region selection / grid detection
+ */
+function setRefStep(step) {
+  refStep = step;
+  refEdgePanel.style.display   = step === 0 ? '' : 'none';
+  refColorPanel.style.display  = step === 1 ? '' : 'none';
+  refRegionPanel.style.display = step >= 2  ? '' : 'none';
+
+  // Swap the canvas image for the current step.
+  if (step === 0 && refRawImageEl) {
+    setRefCanvasFromImage(refRawImageEl);
+  } else if (step === 1 && refCorrectedImageEl) {
+    setRefCanvasFromImage(refCorrectedImageEl);
+  } else if (step >= 2 && refEnhancedImageEl) {
+    setRefCanvasFromImage(refEnhancedImageEl);
+  }
+
+  if (step !== 0) setEdgeDrawMode(null);
+  updateDetectGridBtn();
+  redrawRefCanvas();
+}
+
+/** Enable the Apply-Correction button only when all 4 edge lines are drawn. */
+function updateApplyCorrectionBtn() {
+  const allDrawn = refEdgeLines.top && refEdgeLines.bottom &&
+                   refEdgeLines.left && refEdgeLines.right;
+  btnApplyCorr.disabled = !allDrawn;
+}
+
+/** Enable "Detect Grid Lines" only at step 2 when at least one region is defined. */
+function updateDetectGridBtn() {
+  btnDetectGrid.disabled = !(refStep >= 2 && (answerRegion || idRegion));
+}
+
+/** Update the status text below the edge-line buttons. */
+function updateEdgeStatus() {
+  const drawn     = ['top', 'bottom', 'left', 'right'].filter(k => refEdgeLines[k]);
+  const remaining = ['top', 'bottom', 'left', 'right'].filter(k => !refEdgeLines[k]);
+  if (remaining.length === 0) {
+    refEdgeStatus.textContent = '✓ All 4 edge lines defined — click "Apply Distortion Correction".';
+  } else if (drawn.length === 0) {
+    refEdgeStatus.textContent = 'Draw all 4 edge lines on the image, or use Auto-detect.';
+  } else {
+    refEdgeStatus.textContent = `Drawn: ${drawn.join(', ')}. Still needed: ${remaining.join(', ')}.`;
+  }
+}
+
+/**
+ * Order four [x,y] corner points into [TL, TR, BR, BL] order
+ * (same convention as image_utils.order_points).
+ */
+function orderPoints4(pts) {
+  const sums  = pts.map(p => p[0] + p[1]);
+  const diffs = pts.map(p => p[0] - p[1]);
+  const tl = pts[sums.indexOf(Math.min(...sums))];
+  const br = pts[sums.indexOf(Math.max(...sums))];
+  const tr = pts[diffs.indexOf(Math.max(...diffs))];
+  const bl = pts[diffs.indexOf(Math.min(...diffs))];
+  return [tl, tr, br, bl];
+}
+
+/**
+ * Extend the line through (px1,py1)-(px2,py2) to the canvas boundaries and
+ * return {x1,y1,x2,y2} of the clipped endpoints.  Returns null for a
+ * degenerate segment.
+ */
+function extendLineToCanvas(px1, py1, px2, py2, cw, ch) {
+  const dx = px2 - px1, dy = py2 - py1;
+  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return null;
+  const ts = [];
+  if (Math.abs(dx) > 1e-6) { ts.push(-px1 / dx); ts.push((cw - px1) / dx); }
+  if (Math.abs(dy) > 1e-6) { ts.push(-py1 / dy); ts.push((ch - py1) / dy); }
+  ts.sort((a, b) => a - b);
+  return {
+    x1: px1 + ts[0] * dx,            y1: py1 + ts[0] * dy,
+    x2: px1 + ts[ts.length - 1] * dx, y2: py1 + ts[ts.length - 1] * dy,
+  };
+}
+
+/** Draw all committed edge lines and the live drag line onto the canvas. */
+function drawEdgeLines() {
+  if (!refRawImageEl) return;
+  const sx = refCanvas.width  / refRawImageEl.naturalWidth;
+  const sy = refCanvas.height / refRawImageEl.naturalHeight;
+
+  refCtx.save();
+  refCtx.strokeStyle = '#7c3aed';
+  refCtx.lineWidth   = 2;
+  refCtx.setLineDash([7, 5]);
+  refCtx.shadowColor = 'rgba(0,0,0,.35)';
+  refCtx.shadowBlur  = 3;
+
+  ['top', 'bottom', 'left', 'right'].forEach(key => {
+    const ln = refEdgeLines[key];
+    if (!ln) return;
+    const ext = extendLineToCanvas(ln[0] * sx, ln[1] * sy, ln[2] * sx, ln[3] * sy,
+                                   refCanvas.width, refCanvas.height);
+    if (!ext) return;
+    refCtx.globalAlpha = 0.9;
+    refCtx.beginPath();
+    refCtx.moveTo(ext.x1, ext.y1);
+    refCtx.lineTo(ext.x2, ext.y2);
+    refCtx.stroke();
+    // Label
+    const mx = (ext.x1 + ext.x2) / 2, my = (ext.y1 + ext.y2) / 2;
+    refCtx.save();
+    refCtx.setLineDash([]);
+    refCtx.shadowBlur = 0;
+    refCtx.fillStyle = '#7c3aed';
+    refCtx.globalAlpha = 0.9;
+    refCtx.font = 'bold 11px sans-serif';
+    refCtx.fillText(key[0].toUpperCase(), mx + 4, my - 4);
+    refCtx.restore();
+  });
+
+  // Live drag line
+  if (isEdgeDrawing && edgeDrawStart && edgeDrawCurrent) {
+    const ext = extendLineToCanvas(
+      edgeDrawStart.x, edgeDrawStart.y,
+      edgeDrawCurrent.x, edgeDrawCurrent.y,
+      refCanvas.width, refCanvas.height
+    );
+    if (ext) {
+      refCtx.globalAlpha = 0.55;
+      refCtx.beginPath();
+      refCtx.moveTo(ext.x1, ext.y1);
+      refCtx.lineTo(ext.x2, ext.y2);
+      refCtx.stroke();
+    }
+  }
+
+  refCtx.restore();
+}
+
+/**
+ * Draw detected grid lines returned by detect_reference_grid.
+ * linesData: {answer_lines_h?, answer_lines_v?, id_lines_h?, id_lines_v?}
+ * Positions are in corrected-image pixel coordinates; the canvas may be
+ * showing a scaled version, so we convert via the enhanced-image dimensions.
+ */
+function drawDetectedGridLines(linesData) {
+  if (!linesData) return;
+  const imgW = refEnhancedImageEl ? refEnhancedImageEl.naturalWidth  : refCanvas.width;
+  const imgH = refEnhancedImageEl ? refEnhancedImageEl.naturalHeight : refCanvas.height;
+  const sx = refCanvas.width  / imgW;
+  const sy = refCanvas.height / imgH;
+
+  function drawSet(hLines, vLines, color) {
+    if (!hLines && !vLines) return;
+    refCtx.save();
+    refCtx.strokeStyle = color;
+    refCtx.lineWidth   = 1;
+    refCtx.globalAlpha = 0.85;
+    refCtx.setLineDash([3, 3]);
+    (hLines || []).forEach(y => {
+      const cy = y * sy;
+      refCtx.beginPath(); refCtx.moveTo(0, cy); refCtx.lineTo(refCanvas.width, cy); refCtx.stroke();
+    });
+    (vLines || []).forEach(x => {
+      const cx = x * sx;
+      refCtx.beginPath(); refCtx.moveTo(cx, 0); refCtx.lineTo(cx, refCanvas.height); refCtx.stroke();
+    });
+    refCtx.restore();
+  }
+
+  drawSet(linesData.answer_lines_h, linesData.answer_lines_v, '#2563eb');
+  drawSet(linesData.id_lines_h,     linesData.id_lines_v,     '#ea580c');
+}
+
+// ── Workflow async operations ─────────────────────────────────────────────────
+
+/** Step 0 → 1: Apply distortion correction, run color analysis. */
+async function applyRefCorrection() {
+  if (!processRefImageFn) return;
+  const rawBytes = await idbGet(IDB_KEY_REF).catch(() => null);
+  if (!(rawBytes instanceof Uint8Array) || rawBytes.length === 0) return;
+
+  btnApplyCorr.disabled = true;
+  btnApplyCorr.textContent = '⏳ Processing…';
+  await new Promise(r => setTimeout(r, 20)); // yield so the label renders
+
+  try {
+    // Collect edge lines (in original image pixel coords)
+    const lines = [refEdgeLines.top, refEdgeLines.bottom,
+                   refEdgeLines.left, refEdgeLines.right];
+    const edgesJson = lines.every(Boolean) ? JSON.stringify(lines) : 'null';
+
+    const resultJson = processRefImageFn(rawBytes, edgesJson);
+    const result = JSON.parse(resultJson);
+    if (!result) return;
+
+    refCorrectedImageB64  = result.corrected_image_b64;
+    refBestChannel        = result.best_channel;
+    refChannelVariances   = result.channel_variances;
+
+    // Load corrected and enhanced image elements.
+    await Promise.all([
+      new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => { refCorrectedImageEl = img; resolve(); };
+        img.src = 'data:image/png;base64,' + result.corrected_image_b64;
+      }),
+      new Promise(resolve => {
+        const img = new Image();
+        img.onload = () => { refEnhancedImageEl = img; resolve(); };
+        img.src = 'data:image/png;base64,' + result.enhanced_image_b64;
+      }),
+    ]);
+
+    // Pre-select the auto-detected channel in the dropdown.
+    $('ref-color-channel').value = result.best_channel;
+
+    // Show color analysis results.
+    const chNames = ['Blue', 'Green', 'Red'];
+    const vars    = result.channel_variances;
+    const best    = result.best_channel;
+    refColorInfo.innerHTML =
+      `<strong>Auto-detected channel:</strong> ${chNames[best]} (${best})<br>` +
+      `<table>` +
+      chNames.map((n, i) =>
+        `<tr style="${i===best ? 'font-weight:700;color:var(--success,#16a34a)' : ''}">` +
+        `<td>${n}</td><td>${vars[i].toFixed(1)}</td>` +
+        `${i === best ? '<td style="padding-left:6px">← auto</td>' : '<td></td>'}` +
+        `</tr>`
+      ).join('') +
+      `</table>`;
+
+    setRefStep(1);
+  } catch (err) {
+    console.error('process_reference_image failed:', err);
+  } finally {
+    updateApplyCorrectionBtn();
+    btnApplyCorr.textContent = '✓ Apply Distortion Correction →';
+  }
+}
+
+/** Step 1 → 2: Re-enhance with selected channel and show the enhanced image. */
+async function showEnhancedImage() {
+  if (!enhanceRefChannelFn || !refCorrectedImageB64) return;
+  const channel = parseInt($('ref-color-channel').value);
+
+  btnShowEnhanced.disabled = true;
+  btnShowEnhanced.textContent = '⏳ Enhancing…';
+  await new Promise(r => setTimeout(r, 20));
+
+  try {
+    const resultJson = enhanceRefChannelFn(refCorrectedImageB64, channel);
+    const result = JSON.parse(resultJson);
+    if (!result) return;
+
+    await new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => { refEnhancedImageEl = img; resolve(); };
+      img.src = 'data:image/png;base64,' + result.enhanced_image_b64;
+    });
+
+    // Reset any previous grid detection when a new enhanced image is shown.
+    refGridLinesData = null;
+
+    setRefStep(2);
+  } catch (err) {
+    console.error('enhance_reference_channel failed:', err);
+  } finally {
+    btnShowEnhanced.disabled = false;
+    btnShowEnhanced.textContent = '🎨 Show Enhanced Image →';
+  }
+}
+
+/** Step 2: Detect grid lines in the selected answer / ID regions. */
+async function detectRefGrid() {
+  if (!detectRefGridFn || !refCorrectedImageB64) return;
+  const s = getSettings();
+
+  btnDetectGrid.disabled = true;
+  btnDetectGrid.textContent = '⏳ Detecting…';
+  await new Promise(r => setTimeout(r, 20));
+
+  try {
+    const resultJson = detectRefGridFn(
+      refCorrectedImageB64,
+      JSON.stringify(answerRegion),
+      JSON.stringify(idRegion),
+      s.numQuestions,
+      s.numChoices,
+      s.numIdDigits
+    );
+    const result = JSON.parse(resultJson);
+    refGridLinesData = result;
+    redrawRefCanvas();
+    const hasLines = result &&
+      (result.answer_lines_h || result.answer_lines_v ||
+       result.id_lines_h     || result.id_lines_v);
+    if (!hasLines) {
+      refModeHint.textContent = 'Grid detection returned no lines — arithmetic grid is shown instead.';
+    } else {
+      refModeHint.textContent = '✓ Detected grid lines drawn (dashed). Draw or adjust regions if needed.';
+    }
+  } catch (err) {
+    console.error('detect_reference_grid failed:', err);
+    refModeHint.textContent = `Grid detection error: ${err.message}`;
+  } finally {
+    btnDetectGrid.disabled = false;
+    btnDetectGrid.textContent = '🔍 Detect Grid Lines';
+  }
+}
+
+// ── Edge-line button event handlers ──────────────────────────────────────────
+
+['top', 'bottom', 'left', 'right'].forEach(edge => {
+  const btn = $(`btn-edge-${edge}`);
+  if (!btn) return;
+  btn.addEventListener('click', () =>
+    setEdgeDrawMode(edgeDrawMode === edge ? null : edge));
+});
+
+btnEdgeClear.addEventListener('click', () => {
+  refEdgeLines = { top: null, bottom: null, left: null, right: null };
+  setEdgeDrawMode(null);
+  updateApplyCorrectionBtn();
+  updateEdgeStatus();
+  saveEdgeLines();
+  redrawRefCanvas();
+});
+
+btnAutoEdges.addEventListener('click', async () => {
+  const rawBytes = await idbGet(IDB_KEY_REF).catch(() => null);
+  if (!(rawBytes instanceof Uint8Array) || rawBytes.length === 0 || !detectContourFn) return;
+  try {
+    const result = JSON.parse(detectContourFn(rawBytes));
+    if (!result || !result.contour) {
+      refEdgeStatus.textContent = 'Auto-detect found no page boundary. Try adjusting the image.';
+      return;
+    }
+    const [tl, tr, br, bl] = orderPoints4(result.contour);
+    refEdgeLines = {
+      top:    [tl[0], tl[1], tr[0], tr[1]],
+      right:  [tr[0], tr[1], br[0], br[1]],
+      bottom: [bl[0], bl[1], br[0], br[1]],
+      left:   [tl[0], tl[1], bl[0], bl[1]],
+    };
+    updateApplyCorrectionBtn();
+    updateEdgeStatus();
+    saveEdgeLines();
+    redrawRefCanvas();
+  } catch (err) {
+    refEdgeStatus.textContent = `Auto-detect error: ${err.message}`;
+  }
+});
+
+btnApplyCorr.addEventListener('click', () => applyRefCorrection());
+
+// ── Step navigation event handlers ───────────────────────────────────────────
+
+btnBackToEdges.addEventListener('click',  () => setRefStep(0));
+btnShowEnhanced.addEventListener('click', () => showEnhancedImage());
+btnBackToColor.addEventListener('click',  () => setRefStep(1));
+btnDetectGrid.addEventListener('click',   () => detectRefGrid());
 
 // ── Collapsible settings ─────────────────────────────────────────────────────
 
