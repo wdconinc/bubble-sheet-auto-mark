@@ -125,12 +125,15 @@ def _lines_to_corners(
         ordered = order_points(quad)
         tl, tr, br, bl = ordered
         # Shoelace formula
-        area = abs(
-            (tl[0] * tr[1] - tr[0] * tl[1])
-            + (tr[0] * br[1] - br[0] * tr[1])
-            + (br[0] * bl[1] - bl[0] * br[1])
-            + (bl[0] * tl[1] - tl[0] * bl[1])
-        ) / 2.0
+        area = (
+            abs(
+                (tl[0] * tr[1] - tr[0] * tl[1])
+                + (tr[0] * br[1] - br[0] * tr[1])
+                + (br[0] * bl[1] - bl[0] * br[1])
+                + (bl[0] * tl[1] - tl[0] * bl[1])
+            )
+            / 2.0
+        )
         if area > best_area:
             best_area = area
             best_quad = ordered

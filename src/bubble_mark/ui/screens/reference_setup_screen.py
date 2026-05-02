@@ -167,8 +167,8 @@ def build_reference_setup_screen(app: "BubbleMarkApp") -> toga.Box:
 
     # -- Internal state -------------------------------------------------------
     _state: dict = {
-        "raw_image": None,       # BGR ndarray of the loaded reference image
-        "corrected_image": None, # BGR ndarray after perspective correction
+        "raw_image": None,  # BGR ndarray of the loaded reference image
+        "corrected_image": None,  # BGR ndarray after perspective correction
     }
 
     # -- Load reference image -------------------------------------------------

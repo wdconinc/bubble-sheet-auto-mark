@@ -123,7 +123,7 @@ class TestCorrectDistortionFromLines:
         lines = [
             [0, 0, 200, 0],
             [0, 200, 200, 200],
-            [0, 0, 200, 0],   # duplicate top
+            [0, 0, 200, 0],  # duplicate top
             [0, 200, 200, 200],  # duplicate bottom
         ]
         # Should either return None or not crash
