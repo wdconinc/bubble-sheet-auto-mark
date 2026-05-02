@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bubble Sheet Auto-Mark – Browser App</title>
+  <!--
+    Pyodide loads Python 3.12 into WebAssembly so ALL image processing runs
+    entirely in this browser tab.  No image or grade data is ever transmitted
+    to any server.
+  -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
+  <style>
+    :root {
+      --primary:       #2563eb;
+      --primary-dark:  #1d4ed8;
+      --success:       #16a34a;
+      --success-dark:  #15803d;
+      --danger:        #dc2626;
+      --warn-bg:       #fefce8;
+      --warn-border:   #fde047;
+      --text:          #1e293b;
+      --muted:         #64748b;
+      --bg:            #f1f5f9;
+      --card:          #ffffff;
+      --border:        #e2e8f0;
+      --radius:        8px;
+      --shadow:        0 1px 3px rgba(0,0,0,.10), 0 1px 2px rgba(0,0,0,.06);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    a { color: var(--primary); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Loading overlay ── */
+    #loading-overlay {
+      position: fixed; inset: 0;
+      background: rgba(241,245,249,.96);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      gap: 14px;
+      z-index: 900;
+    }
+    #loading-overlay.hidden { display: none; }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 4px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-msg { color: var(--muted); font-size: .95rem; text-align: center; max-width: 320px; }
+    #loading-err { color: var(--danger); font-size: .875rem; text-align: center; max-width: 380px; }
+
+    /* ── Header ── */
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 14px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 8px;
+    }
+    header h1 { font-size: 1.15rem; font-weight: 600; }
+    header nav { display: flex; gap: 16px; font-size: .85rem; }
+    header nav a { color: rgba(255,255,255,.85); }
+    header nav a:hover { color: #fff; }
+
+    /* ── Privacy banner ── */
+    .privacy-banner {
+      background: var(--warn-bg);
+      border-bottom: 1px solid var(--warn-border);
+      padding: 9px 24px;
+      font-size: .85rem;
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    .privacy-banner strong { white-space: nowrap; }
+
+    /* ── Layout ── */
+    main {
+      max-width: 860px;
+      margin: 24px auto;
+      padding: 0 16px;
+      display: flex; flex-direction: column; gap: 20px;
+    }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .card-head {
+      padding: 13px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .card-head.static { cursor: default; }
+    .card-head h2 { font-size: .95rem; font-weight: 600; display: flex; align-items: center; gap: 7px; }
+    .chevron { font-size: .75rem; transition: transform .2s; }
+    .collapsed .chevron { transform: rotate(-90deg); }
+    .card-body { padding: 18px; }
+    .card-body.hidden { display: none; }
+
+    /* ── Forms ── */
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .form-full { grid-column: 1 / -1; }
+    .field { display: flex; flex-direction: column; gap: 4px; }
+    .field label { font-size: .8rem; font-weight: 500; color: var(--muted); }
+    input[type="number"], input[type="text"] {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: .9rem;
+      background: var(--bg);
+      color: var(--text);
+    }
+    input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(37,99,235,.15); }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+    button {
+      padding: 8px 15px;
+      border: none; border-radius: 6px;
+      font-size: .85rem; font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, opacity .15s;
+      display: inline-flex; align-items: center; gap: 5px;
+    }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:not(:disabled):hover { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:not(:disabled):hover { background: var(--success-dark); }
+    .btn-ghost { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:not(:disabled):hover { background: var(--border); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-danger:not(:disabled):hover { background: #b91c1c; }
+
+    /* ── Status pill ── */
+    .status-pill {
+      font-size: .85rem; padding: 7px 12px;
+      border-radius: 6px; margin-top: 8px;
+    }
+    .status-pill:empty { display: none; }
+    .status-pill.info    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+    .status-pill.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+    .status-pill.error   { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+
+    /* ── Image preview ── */
+    #preview-area {
+      margin-top: 12px;
+      min-height: 110px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg); overflow: hidden;
+    }
+    #preview-area.has-image { border-style: solid; border-color: var(--primary); }
+    #preview-canvas { max-width: 100%; max-height: 380px; display: none; border-radius: 4px; }
+    #preview-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
+
+    /* ── Camera ── */
+    #camera-section { margin-top: 12px; display: none; }
+    #camera-video {
+      width: 100%; max-height: 380px;
+      background: #000; border-radius: var(--radius); display: block;
+    }
+
+    /* ── Results table ── */
+    .table-wrap { overflow-x: auto; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    th {
+      background: var(--bg); padding: 9px 12px;
+      text-align: left; font-weight: 600;
+      border-bottom: 2px solid var(--border); white-space: nowrap;
+    }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    td.mono { font-family: "SF Mono", "Fira Code", ui-monospace, monospace; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg); }
+    .good { color: var(--success); font-weight: 600; }
+    .bad  { color: var(--danger);  font-weight: 600; }
+    #no-results-msg { text-align: center; padding: 28px; color: var(--muted); font-size: .9rem; }
+
+    /* ── Footer ── */
+    footer {
+      text-align: center;
+      padding: 20px 16px;
+      color: var(--muted);
+      font-size: .8rem;
+      border-top: 1px solid var(--border);
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Loading overlay (hidden once Pyodide is ready) -->
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div id="loading-msg">Initialising Python runtime…</div>
+  <div id="loading-err"></div>
+</div>
+
+<header>
+  <h1>Bubble Sheet Auto-Mark</h1>
+  <nav>
+    <a href="../" target="_blank">← Docs</a>
+    <a href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank">GitHub</a>
+  </nav>
+</header>
+
+<div class="privacy-banner">
+  🔒 <strong>Privacy-first:</strong>&nbsp;
+  all image processing runs entirely in your browser via
+  <a href="https://pyodide.org" target="_blank">Pyodide</a> (Python&nbsp;3.12&nbsp;→&nbsp;WebAssembly).
+  No image or grade data is ever sent to any server.
+</div>
+
+<main>
+
+  <!-- ── Settings card ── -->
+  <div class="card">
+    <div class="card-head" id="settings-toggle">
+      <h2>⚙ Settings</h2>
+      <span class="chevron">▼</span>
+    </div>
+    <div class="card-body" id="settings-body">
+      <div class="form-grid">
+        <div class="field">
+          <label for="num-questions">Questions</label>
+          <input type="number" id="num-questions" value="30" min="1" max="200">
+        </div>
+        <div class="field">
+          <label for="num-choices">Choices per question</label>
+          <input type="number" id="num-choices" value="5" min="2" max="10">
+        </div>
+        <div class="field">
+          <label for="num-id-digits">ID digits</label>
+          <input type="number" id="num-id-digits" value="9" min="1" max="20">
+        </div>
+        <div class="field">
+          <label for="fill-threshold">Fill threshold (0–1)</label>
+          <input type="number" id="fill-threshold" value="0.5" min="0.01" max="1" step="0.01">
+        </div>
+        <div class="field form-full">
+          <label for="answer-key">
+            Answer key
+            <span style="font-weight:400;color:var(--muted)"> — digits 1–5 or letters A–E; leave blank to skip scoring</span>
+          </label>
+          <input type="text" id="answer-key" placeholder="e.g. 134521345213452…">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Grade card ── -->
+  <div class="card">
+    <div class="card-head static">
+      <h2>📷 Grade Image</h2>
+    </div>
+    <div class="card-body">
+      <div class="btn-row">
+        <button class="btn-primary" id="btn-upload" disabled>📁 Upload Image</button>
+        <input type="file" id="file-input" accept="image/*" hidden>
+        <button class="btn-ghost" id="btn-camera" disabled>📷 Use Camera</button>
+        <button class="btn-success" id="btn-grade" disabled>▶ Grade Sheet</button>
+      </div>
+
+      <!-- Camera viewfinder -->
+      <div id="camera-section">
+        <video id="camera-video" autoplay playsinline muted></video>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn-primary" id="btn-capture">📸 Capture Frame</button>
+          <button class="btn-ghost" id="btn-stop-camera">⏹ Stop Camera</button>
+        </div>
+      </div>
+
+      <!-- Image preview -->
+      <div id="preview-area">
+        <span id="preview-hint">Upload an image or use the camera to get started.</span>
+        <canvas id="preview-canvas"></canvas>
+      </div>
+
+      <div id="grade-status" class="status-pill"></div>
+    </div>
+  </div>
+
+  <!-- ── Results card ── -->
+  <div class="card">
+    <div class="card-head static">
+      <h2>📊 Results (<span id="result-count">0</span> sheets)</h2>
+    </div>
+    <div class="card-body">
+      <div class="btn-row">
+        <button class="btn-primary" id="btn-csv" disabled>⬇ Download CSV</button>
+        <button class="btn-danger" id="btn-clear" disabled>🗑 Clear</button>
+      </div>
+      <div class="table-wrap">
+        <p id="no-results-msg">No results yet — grade a sheet above.</p>
+        <table id="results-table" hidden>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Student ID</th>
+              <th>Answers</th>
+              <th>Score</th>
+              <th>Correct / Total</th>
+            </tr>
+          </thead>
+          <tbody id="results-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>
+  <a href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank">Bubble Sheet Auto-Mark</a>
+  · Released under the
+  <a href="https://github.com/wdconinc/bubble-sheet-auto-mark/blob/main/LICENSE" target="_blank">MIT License</a>
+  · Powered by <a href="https://pyodide.org" target="_blank">Pyodide</a>
+</footer>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Python setup code — the browser ignores this script type; JavaScript
+     reads it as plain text and runs it inside Pyodide after loading.
+     ───────────────────────────────────────────────────────────────────────── -->
+<script type="text/python" id="python-setup">
+import sys, io, json
+
+# Ensure the package directory written by loadPythonFiles() is importable.
+if '/home/pyodide' not in sys.path:
+    sys.path.insert(0, '/home/pyodide')
+
+import numpy as np
+from PIL import Image as PILImage
+
+from bubble_mark.processing.analyzer import BubbleAnalyzer
+from bubble_mark.processing.detector import BubbleSheetDetector
+from bubble_mark.processing.grader import BubbleSheetGrader
+from bubble_mark.models.answer_key import AnswerKey
+from bubble_mark.export.csv_exporter import CSVExporter
+
+
+def grade_sheet(image_bytes_js, num_questions, num_choices,
+                num_id_digits, fill_threshold, answer_key_str):
+    """Grade one bubble sheet image.
+
+    Parameters
+    ----------
+    image_bytes_js:
+        A JavaScript Uint8Array (JsProxy) containing raw image bytes
+        (JPEG / PNG / BMP).  Converted to Python bytearray via .to_py().
+    Returns a JSON string encoding the result dict, or the string ``'null'``
+    when no sheet could be detected.
+    """
+    data = image_bytes_js.to_py()          # JsProxy[Uint8Array] → bytearray
+    pil = PILImage.open(io.BytesIO(data)).convert('RGB')
+    rgb = np.array(pil, dtype=np.uint8)
+    bgr = rgb[:, :, ::-1].copy()           # RGB → BGR (cv2 convention)
+
+    layout = {
+        'num_questions':        int(num_questions),
+        'num_choices':          int(num_choices),
+        'num_id_digits':        int(num_id_digits),
+        'id_choices_per_digit': 10,
+    }
+
+    answer_key = AnswerKey(str(answer_key_str)) if answer_key_str else None
+    detector = BubbleSheetDetector(layout)
+    analyzer = BubbleAnalyzer(float(fill_threshold))
+    grader = BubbleSheetGrader(answer_key, detector, analyzer)
+
+    result = grader.grade_image(bgr)
+    return 'null' if result is None else json.dumps(result.to_dict())
+
+
+def build_csv(results_json_str, answer_key_str):
+    """Return a CSV string for a JSON-encoded list of result dicts.
+
+    Re-attaches the current answer key so that scores are recomputed from
+    the live settings at export time (consistent with the desktop app).
+    """
+    from bubble_mark.models.grade_result import GradeResult
+
+    results_list = json.loads(str(results_json_str))
+    answer_key = AnswerKey(str(answer_key_str)) if answer_key_str else None
+    grade_results = [
+        GradeResult(
+            student_id=r['student_id'],
+            answers=r['answers'],
+            answer_key=answer_key,
+        )
+        for r in results_list
+    ]
+    return CSVExporter().export_to_string(grade_results)
+</script>
+
+<!-- ─────────────────────────────────────────────────────────────────────────
+     Application JavaScript
+     ───────────────────────────────────────────────────────────────────────── -->
+<script>
+'use strict';
+
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const PYODIDE_INDEX = 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/';
+
+// Python source files to fetch and write into Pyodide's virtual filesystem.
+// These are served from ./bubble_mark/ (relative to this page) by GitHub Pages.
+// The CI step in pages.yml copies src/bubble_mark/ → _site/app/bubble_mark/.
+const PYTHON_FILES = [
+  'bubble_mark/__init__.py',
+  'bubble_mark/processing/__init__.py',
+  'bubble_mark/processing/image_utils.py',
+  'bubble_mark/processing/detector.py',
+  'bubble_mark/processing/analyzer.py',
+  'bubble_mark/processing/grader.py',
+  'bubble_mark/models/__init__.py',
+  'bubble_mark/models/answer_key.py',
+  'bubble_mark/models/grade_result.py',
+  'bubble_mark/models/settings.py',
+  'bubble_mark/export/__init__.py',
+  'bubble_mark/export/csv_exporter.py',
+];
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let pyodide        = null;
+let gradeSheetFn   = null;   // Python callable, kept alive for the session
+let buildCsvFn     = null;
+let results        = [];     // accumulated GradeResult dicts
+let pendingBytes   = null;   // Uint8Array of the currently loaded image
+let cameraStream   = null;
+
+// ── DOM ──────────────────────────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+
+const overlay       = $('loading-overlay');
+const loadingMsg    = $('loading-msg');
+const loadingErr    = $('loading-err');
+const btnUpload     = $('btn-upload');
+const fileInput     = $('file-input');
+const btnCamera     = $('btn-camera');
+const btnGrade      = $('btn-grade');
+const btnCapture    = $('btn-capture');
+const btnStopCam    = $('btn-stop-camera');
+const cameraSection = $('camera-section');
+const cameraVideo   = $('camera-video');
+const previewArea   = $('preview-area');
+const previewCanvas = $('preview-canvas');
+const previewHint   = $('preview-hint');
+const gradeStatus   = $('grade-status');
+const resultCount   = $('result-count');
+const noResultsMsg  = $('no-results-msg');
+const resultsTable  = $('results-table');
+const resultsTbody  = $('results-tbody');
+const btnCsv        = $('btn-csv');
+const btnClear      = $('btn-clear');
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+
+async function init() {
+  try {
+    setLoadingMsg('Loading Python runtime (Pyodide)…');
+    pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX });
+
+    setLoadingMsg('Loading NumPy and Pillow…');
+    await pyodide.loadPackage(['numpy', 'pillow']);
+
+    setLoadingMsg('Fetching image-processing modules…');
+    await fetchPythonFiles();
+
+    setLoadingMsg('Setting up grading pipeline…');
+    const setupCode = $('python-setup').textContent;
+    await pyodide.runPythonAsync(setupCode);
+
+    // Keep references to the two Python callables for the session lifetime.
+    gradeSheetFn = pyodide.globals.get('grade_sheet');
+    buildCsvFn   = pyodide.globals.get('build_csv');
+
+    setLoadingMsg('Ready!');
+    await new Promise((r) => setTimeout(r, 300));
+    overlay.classList.add('hidden');
+    enableUI();
+
+  } catch (err) {
+    loadingErr.textContent =
+      `Failed to initialise: ${err.message}. ` +
+      'Please check your connection and refresh the page.';
+    console.error(err);
+  }
+}
+
+// ── Pyodide helpers ──────────────────────────────────────────────────────────
+
+async function fetchPythonFiles() {
+  // Create package directories in Pyodide's in-memory filesystem.
+  pyodide.FS.mkdirTree('/home/pyodide/bubble_mark/processing');
+  pyodide.FS.mkdirTree('/home/pyodide/bubble_mark/models');
+  pyodide.FS.mkdirTree('/home/pyodide/bubble_mark/export');
+
+  // Fetch all source files in parallel.
+  await Promise.all(PYTHON_FILES.map(async (rel) => {
+    const resp = await fetch(`./${rel}`);
+    if (!resp.ok) {
+      throw new Error(`Could not fetch ${rel} (HTTP ${resp.status}). ` +
+        'The Python package files must be deployed alongside this page.');
+    }
+    const text = await resp.text();
+    pyodide.FS.writeFile(`/home/pyodide/${rel}`, text);
+  }));
+}
+
+// ── UI helpers ───────────────────────────────────────────────────────────────
+
+function setLoadingMsg(msg) { loadingMsg.textContent = msg; }
+
+function enableUI() {
+  btnUpload.disabled = false;
+  btnCamera.disabled = false;
+}
+
+function setStatus(msg, type) {
+  gradeStatus.textContent = msg;
+  gradeStatus.className = `status-pill ${type}`;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function getSettings() {
+  return {
+    numQuestions:  parseInt($('num-questions').value)  || 30,
+    numChoices:    parseInt($('num-choices').value)    || 5,
+    numIdDigits:   parseInt($('num-id-digits').value)  || 9,
+    fillThreshold: parseFloat($('fill-threshold').value) || 0.5,
+    answerKey:     $('answer-key').value.trim(),
+  };
+}
+
+// ── Image loading ────────────────────────────────────────────────────────────
+
+function loadImageBlob(blob) {
+  blob.arrayBuffer().then((buf) => {
+    pendingBytes = new Uint8Array(buf);
+
+    // Draw preview on canvas.
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      previewCanvas.width  = img.naturalWidth;
+      previewCanvas.height = img.naturalHeight;
+      previewCanvas.getContext('2d').drawImage(img, 0, 0);
+      previewCanvas.style.display = 'block';
+      previewHint.style.display   = 'none';
+      previewArea.classList.add('has-image');
+      URL.revokeObjectURL(url);
+    };
+    img.src = url;
+
+    btnGrade.disabled = false;
+    setStatus('Image loaded — click "Grade Sheet" to process.', 'info');
+  });
+}
+
+// ── Upload ───────────────────────────────────────────────────────────────────
+
+btnUpload.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    stopCamera();
+    loadImageBlob(file);
+    fileInput.value = '';
+  }
+});
+
+// ── Camera ───────────────────────────────────────────────────────────────────
+
+btnCamera.addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus(
+      'Camera API not available. Use file upload, or ensure the page is served over HTTPS.',
+      'error'
+    );
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+    });
+    cameraVideo.srcObject = cameraStream;
+    cameraSection.style.display = 'block';
+    setStatus('Point the camera at a bubble sheet and tap "Capture Frame".', 'info');
+  } catch (err) {
+    const msg = err.name === 'NotAllowedError'
+      ? 'Camera permission denied. Please allow camera access and try again.'
+      : `Camera error: ${err.message}`;
+    setStatus(msg, 'error');
+  }
+});
+
+btnCapture.addEventListener('click', () => {
+  if (!cameraStream) return;
+  const cap = document.createElement('canvas');
+  cap.width  = cameraVideo.videoWidth;
+  cap.height = cameraVideo.videoHeight;
+  cap.getContext('2d').drawImage(cameraVideo, 0, 0);
+  cap.toBlob((blob) => { stopCamera(); loadImageBlob(blob); }, 'image/jpeg', 0.92);
+});
+
+btnStopCam.addEventListener('click', stopCamera);
+
+function stopCamera() {
+  if (cameraStream) {
+    cameraStream.getTracks().forEach((t) => t.stop());
+    cameraStream = null;
+  }
+  cameraVideo.srcObject = null;
+  cameraSection.style.display = 'none';
+}
+
+// ── Grading ──────────────────────────────────────────────────────────────────
+
+btnGrade.addEventListener('click', async () => {
+  if (!pendingBytes || !gradeSheetFn) return;
+
+  btnGrade.disabled = true;
+  setStatus('Processing image — this may take a few seconds…', 'info');
+
+  // Yield to the event loop so the status message renders before Pyodide blocks.
+  await new Promise((r) => setTimeout(r, 30));
+
+  try {
+    const s = getSettings();
+    const resultJson = gradeSheetFn(
+      pendingBytes,
+      s.numQuestions, s.numChoices, s.numIdDigits,
+      s.fillThreshold, s.answerKey
+    );
+
+    const result = JSON.parse(resultJson);
+    if (result === null) {
+      setStatus(
+        'No bubble sheet detected. Ensure the sheet fills most of the frame and try again.',
+        'error'
+      );
+    } else {
+      results.push(result);
+      appendResultRow(result, results.length);
+      refreshResultsPanel();
+
+      const scored = result.score != null;
+      setStatus(
+        scored
+          ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
+          : `✓ Detected ${result.num_questions} answers. (No answer key — scoring skipped.)`,
+        'success'
+      );
+    }
+  } catch (err) {
+    setStatus(`Grading error: ${err.message}`, 'error');
+    console.error(err);
+  } finally {
+    btnGrade.disabled = false;
+  }
+});
+
+// ── Results ──────────────────────────────────────────────────────────────────
+
+function appendResultRow(r, idx) {
+  const scored = r.score != null;
+  const scoreTxt = scored ? `${(r.score * 100).toFixed(1)} %` : '–';
+  const scoreCls = scored ? (r.score >= 0.6 ? 'good' : 'bad') : '';
+  const correctTxt = scored ? `${r.num_correct} / ${r.num_questions}` : `– / ${r.num_questions}`;
+
+  // Truncate long answer strings for display.
+  const ans = r.answers || '';
+  const ansDisplay = ans.length > 35 ? ans.slice(0, 35) + '…' : ans;
+
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td>${idx}</td>
+    <td class="mono">${escHtml(r.student_id || '–')}</td>
+    <td class="mono" title="${escHtml(ans)}">${escHtml(ansDisplay)}</td>
+    <td class="${scoreCls}">${scoreTxt}</td>
+    <td>${correctTxt}</td>
+  `;
+  resultsTbody.appendChild(tr);
+}
+
+function refreshResultsPanel() {
+  const n = results.length;
+  resultCount.textContent = n;
+  const hasResults = n > 0;
+  noResultsMsg.hidden     = hasResults;
+  resultsTable.hidden     = !hasResults;
+  btnCsv.disabled         = !hasResults;
+  btnClear.disabled       = !hasResults;
+}
+
+btnClear.addEventListener('click', () => {
+  results = [];
+  resultsTbody.innerHTML = '';
+  refreshResultsPanel();
+  setStatus('', '');
+});
+
+btnCsv.addEventListener('click', async () => {
+  if (!results.length || !buildCsvFn) return;
+  try {
+    const s = getSettings();
+    const csvStr = buildCsvFn(JSON.stringify(results), s.answerKey);
+    const blob = new Blob([csvStr], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = Object.assign(document.createElement('a'), {
+      href: url, download: 'bubble_sheet_results.csv',
+    });
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    setStatus(`CSV export error: ${err.message}`, 'error');
+  }
+});
+
+// ── Collapsible settings ─────────────────────────────────────────────────────
+
+$('settings-toggle').addEventListener('click', () => {
+  const body    = $('settings-body');
+  const toggle  = $('settings-toggle');
+  const isHidden = body.classList.toggle('hidden');
+  toggle.classList.toggle('collapsed', isHidden);
+});
+
+// ── Start ────────────────────────────────────────────────────────────────────
+
+init();
+</script>
+
+</body>
+</html>
