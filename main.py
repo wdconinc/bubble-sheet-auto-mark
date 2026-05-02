@@ -9,6 +9,7 @@ Or using briefcase:
 
     briefcase dev
 """
+
 import os
 import sys
 

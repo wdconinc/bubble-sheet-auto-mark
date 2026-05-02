@@ -24,6 +24,7 @@ toga = [
 dev = [
     "briefcase>=0.3",
     "opencv-python-headless>=4.8",
+    "pre-commit>=3.0",
     "pytest>=8.0",
     "pytest-cov>=4.0",
     "ruff>=0.4",
