@@ -40,6 +40,18 @@ Key design principles:
 
 ---
 
+## Try in Your Browser
+
+No installation required.
+The **[Web App](app/)** runs the complete grading pipeline in your browser via
+[Pyodide](https://pyodide.org) (Python&nbsp;3.12&nbsp;→ WebAssembly).
+All image processing happens locally — no data is ever sent to a server.
+
+{: .highlight }
+> **Privacy preserved:** the web app honours the same privacy-first guarantee as the desktop and Android apps.
+
+---
+
 ## Quick Start
 
 ```bash
