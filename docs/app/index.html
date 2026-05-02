@@ -1371,8 +1371,10 @@ previewArea.addEventListener('dragover', (e) => {
   previewArea.classList.add('drag-over');
 });
 
-previewArea.addEventListener('dragleave', () => {
-  previewArea.classList.remove('drag-over');
+previewArea.addEventListener('dragleave', (e) => {
+  if (!previewArea.contains(e.relatedTarget)) {
+    previewArea.classList.remove('drag-over');
+  }
 });
 
 previewArea.addEventListener('drop', (e) => {
