@@ -243,7 +243,9 @@ def estimate_distortion_from_reference(
 
     ch_sheet = extract_print_channel(sheet_image, channel).astype(np.float32)
     ch_ref = extract_print_channel(reference_image, channel).astype(np.float32)
-    del reference_image  # free the (possibly resized) copy now that channel is extracted
+    del (
+        reference_image
+    )  # free the (possibly resized) copy now that channel is extracted
 
     # Normalised cross-correlation via FFT to find (dx, dy) translation
     dx, dy = _fft_translation(ch_sheet, ch_ref)
@@ -329,10 +331,10 @@ def _fft_translation(
 
     # Conjugate fb in-place, then multiply into fa in-place so peak memory
     # stays at 2 FFT-sized arrays (fa and fb) instead of 3.
-    fb.imag *= -1       # conjugate fb in-place
-    fa *= fb            # fa = fa * conj(fb), in-place
+    fb.imag *= -1  # conjugate fb in-place
+    fa *= fb  # fa = fa * conj(fb), in-place
     del fb
-    cross_power = fa    # rename for clarity (no extra allocation)
+    cross_power = fa  # rename for clarity (no extra allocation)
 
     denom = np.abs(cross_power) + _FFT_EPSILON
     cross_power /= denom
