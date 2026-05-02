@@ -676,14 +676,15 @@ import numpy as np
 from PIL import Image as PILImage
 
 from bubble_mark.processing.analyzer import BubbleAnalyzer
-from bubble_mark.processing.detector import BubbleSheetDetector
+from bubble_mark.processing.detector import BubbleSheetDetector, _SHEET_WIDTH, _SHEET_HEIGHT
 from bubble_mark.processing.grader import BubbleSheetGrader
 from bubble_mark.models.answer_key import AnswerKey
 from bubble_mark.export.csv_exporter import CSVExporter
 
-# Standard normalised sheet dimensions shared with BubbleSheetDetector.
-_NORM_WIDTH  = 850
-_NORM_HEIGHT = 1100
+# Use the detector's canonical normalised sheet dimensions so this file can
+# never drift out of sync with BubbleSheetDetector.
+_NORM_WIDTH  = _SHEET_WIDTH
+_NORM_HEIGHT = _SHEET_HEIGHT
 
 
 def grade_sheet(image_bytes_js, num_questions, num_choices,

@@ -41,9 +41,7 @@ except ImportError:
 _PARALLEL_LINE_EPSILON: float = 1e-10
 
 # Small epsilon added to the FFT cross-power spectrum to avoid division by zero.
-# Stored as float32 so that abs(cross_power) + _FFT_EPSILON stays in float32
-# arithmetic without upcasting to float64.
-_FFT_EPSILON: float = np.float32(1e-10)
+_FFT_EPSILON: float = 1e-10
 
 
 # ---------------------------------------------------------------------------
@@ -236,16 +234,16 @@ def estimate_distortion_from_reference(
                 )
                 pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
                 reference_image = np.array(pil_resized)[:, :, ::-1].copy()
+                del pil, pil_resized
             else:
                 pil = PILImage.fromarray(reference_image.astype(np.uint8), mode="L")
                 pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
                 reference_image = np.array(pil_resized)
+                del pil, pil_resized
 
     ch_sheet = extract_print_channel(sheet_image, channel).astype(np.float32)
     ch_ref = extract_print_channel(reference_image, channel).astype(np.float32)
-    del (
-        reference_image
-    )  # free the (possibly resized) copy now that channel is extracted
+    del reference_image  # free the (possibly resized) copy now that channel is extracted
 
     # Normalised cross-correlation via FFT to find (dx, dy) translation
     dx, dy = _fft_translation(ch_sheet, ch_ref)
@@ -329,11 +327,13 @@ def _fft_translation(
     fa = np.fft.rfft2(img_a, s=(h, w))
     fb = np.fft.rfft2(img_b, s=(h, w))
 
-    cross_power = fa * np.conj(fb)
-    del fa, fb  # release frequency-domain buffers immediately
+    # Conjugate fb in-place, then multiply into fa in-place so peak memory
+    # stays at 2 FFT-sized arrays (fa and fb) instead of 3.
+    fb.imag *= -1       # conjugate fb in-place
+    fa *= fb            # fa = fa * conj(fb), in-place
+    del fb
+    cross_power = fa    # rename for clarity (no extra allocation)
 
-    # Normalise in-place; _FFT_EPSILON is already float32 so arithmetic
-    # stays in float32 without upcasting.
     denom = np.abs(cross_power) + _FFT_EPSILON
     cross_power /= denom
     del denom
