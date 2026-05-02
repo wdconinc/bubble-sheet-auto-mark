@@ -243,6 +243,7 @@
       background: var(--bg); overflow: hidden;
     }
     #preview-area.has-image { border-style: solid; border-color: var(--primary); }
+    #preview-area.drag-over { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, var(--bg)); }
     #preview-canvas { max-width: 100%; display: none; border-radius: 4px; }
     #preview-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
 
@@ -1363,6 +1364,24 @@ fileInput.addEventListener('change', (e) => {
   stopCamera();
   addImageFiles(e.target.files);
   fileInput.value = '';
+});
+
+previewArea.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  previewArea.classList.add('drag-over');
+});
+
+previewArea.addEventListener('dragleave', () => {
+  previewArea.classList.remove('drag-over');
+});
+
+previewArea.addEventListener('drop', (e) => {
+  e.preventDefault();
+  previewArea.classList.remove('drag-over');
+  const files = e.dataTransfer?.files;
+  if (!files?.length) return;
+  stopCamera();
+  addImageFiles(files);
 });
 
 btnClearImages.addEventListener('click', () => {
