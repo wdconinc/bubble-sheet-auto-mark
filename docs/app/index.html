@@ -3164,35 +3164,9 @@ $('settings-toggle').addEventListener('click', () => {
  * Fisher–Yates unshuffle using a 32-bit LCG (Numerical Recipes parameters).
  * Mirrors _unshuffle_answers() in bubble_mark/models/answer_key.py.
  * seed=0 → returns the string unchanged.
+ * Uses BigInt arithmetic to avoid float64 precision loss in the LCG.
  * See https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
  */
-function unshuffleAnswers(answers, seed) {
-  seed = seed >>> 0;  // coerce to unsigned 32-bit integer
-  if (seed === 0) return answers;
-  const n = answers.length;
-  if (n <= 1) return answers;
-
-  const A = 1664525, C = 1013904223, M = 2 ** 32;
-
-  // Reproduce the same LCG sequence used during shuffling.
-  let state = seed;
-  const lcgVals = [];
-  for (let k = 0; k < n - 1; k++) {
-    state = (A * state + C) % M;
-    // JavaScript loses precision for large integers; use BigInt for LCG.
-    lcgVals.push(state);
-  }
-
-  const result = answers.split('');
-  // Replay swaps in reverse order (indices 1..n-1 ascending).
-  for (let i = 1; i < n; i++) {
-    const j = lcgVals[n - 1 - i] % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result.join('');
-}
-
-// Use BigInt arithmetic to avoid float64 precision loss in the LCG.
 function unshuffleAnswersBigInt(answers, seed) {
   seed = BigInt(seed) & 0xFFFFFFFFn;
   if (seed === 0n) return answers;
