@@ -148,7 +148,9 @@ class AnswerKey:
         return cls(s, name=name)
 
     @classmethod
-    def from_qr_string(cls, qr_text: str, shuffle: int = 0, name: str = "") -> "AnswerKey":
+    def from_qr_string(
+        cls, qr_text: str, shuffle: int = 0, name: str = ""
+    ) -> "AnswerKey":
         """Create an :class:`AnswerKey` by decoding a QR-code text payload.
 
         Parameters
