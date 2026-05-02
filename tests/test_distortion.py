@@ -239,10 +239,10 @@ class TestCorrectDistortionFromPolylines:
     def _rect_polylines(x1=50, y1=50, x2=350, y2=450, pts_per_edge=2):
         """Return four polylines that form a rectangle (optionally subdivided)."""
         n = pts_per_edge
-        top    = [[x1 + (x2 - x1) * i / (n - 1), y1] for i in range(n)]
+        top = [[x1 + (x2 - x1) * i / (n - 1), y1] for i in range(n)]
         bottom = [[x1 + (x2 - x1) * i / (n - 1), y2] for i in range(n)]
-        left   = [[x1, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
-        right  = [[x2, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
+        left = [[x1, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
+        right = [[x2, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
         return {"top": top, "bottom": bottom, "left": left, "right": right}
 
     def test_returns_ndarray_for_rect(self):
