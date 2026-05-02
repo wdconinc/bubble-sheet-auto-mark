@@ -332,7 +332,7 @@
         <span id="preview-hint">Upload an image or use the camera to get started.</span>
         <div id="live-overlay-badge">
           <span class="live-badge"><span class="live-dot"></span> LIVE</span>
-          &nbsp;Green border = page detected
+          &nbsp;Green outline = page detected
         </div>
         <canvas id="preview-canvas"></canvas>
       </div>
@@ -470,7 +470,7 @@ def detect_contour(image_bytes_js):
     data = image_bytes_js.to_py()
     pil = PILImage.open(io.BytesIO(data)).convert('RGB')
     rgb = np.array(pil, dtype=np.uint8)
-    bgr = rgb[:, :, ::-1].copy()   # RGB → BGR (cv2 convention)
+    bgr = rgb[:, :, ::-1].copy()   # RGB → BGR (channel order expected by find_page_contour)
 
     contour = find_page_contour(bgr)
     if contour is None:
@@ -789,8 +789,10 @@ function liveOverlayTick(now) {
     if (!blob || !detectContourFn) { liveLoopBusy = false; return; }
     try {
       const bytes  = new Uint8Array(await blob.arrayBuffer());
+      // detectContourFn returns the JSON string 'null' (no sheet) or
+      // '{"contour":[[x,y],…]}' (page found).  JSON.parse maps 'null' → null.
       const result = JSON.parse(detectContourFn(bytes));
-      liveContour  = result ? result.contour : null;
+      liveContour  = result !== null ? result.contour : null;
     } catch (e) {
       console.warn('Live overlay error:', e);
     } finally {
@@ -803,6 +805,7 @@ function drawContourOverlay(ctx, pts) {
   if (!pts || pts.length !== 4) return;
   ctx.save();
   ctx.strokeStyle = '#00ff00';
+  // Scale line width with image resolution: ~4 px at 1280-wide frames.
   ctx.lineWidth   = Math.max(3, Math.round(ctx.canvas.width / 300));
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
   ctx.shadowBlur  = 4;
