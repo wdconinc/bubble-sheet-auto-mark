@@ -288,6 +288,7 @@
     }
     th[data-col] { cursor: pointer; user-select: none; }
     th[data-col]:hover { background: var(--border); }
+    th[data-col]:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
     th[data-col] .sort-indicator { margin-left: 5px; opacity: .35; font-size: .75em; }
     th[data-col].sort-asc  .sort-indicator,
     th[data-col].sort-desc .sort-indicator { opacity: 1; }
@@ -604,11 +605,11 @@
         <table id="results-table" hidden>
           <thead>
             <tr>
-              <th data-col="index">#<span class="sort-indicator">↕</span></th>
-              <th data-col="student_id">Student ID<span class="sort-indicator">↕</span></th>
-              <th data-col="answers">Answers<span class="sort-indicator">↕</span></th>
-              <th data-col="score">Score<span class="sort-indicator">↕</span></th>
-              <th data-col="num_correct">Correct / Total<span class="sort-indicator">↕</span></th>
+              <th data-col="index" tabindex="0" aria-sort="none">#<span class="sort-indicator">↕</span></th>
+              <th data-col="student_id" tabindex="0" aria-sort="none">Student ID<span class="sort-indicator">↕</span></th>
+              <th data-col="answers" tabindex="0" aria-sort="none">Answers<span class="sort-indicator">↕</span></th>
+              <th data-col="score" tabindex="0" aria-sort="none">Score<span class="sort-indicator">↕</span></th>
+              <th data-col="num_correct" tabindex="0" aria-sort="none">Correct / Total<span class="sort-indicator">↕</span></th>
             </tr>
           </thead>
           <tbody id="results-tbody"></tbody>
@@ -2061,8 +2062,8 @@ function renderResultsTable() {
       const vb = vals[b];
       // Null/undefined always sorts to the bottom regardless of direction.
       if (va == null && vb == null) return 0;
-      if (va == null) return sortDir;
-      if (vb == null) return -sortDir;
+      if (va == null) return 1;
+      if (vb == null) return -1;
       if (typeof va === 'string') return va.localeCompare(vb) * sortDir;
       return (va - vb) * sortDir;
     });
@@ -2070,14 +2071,17 @@ function renderResultsTable() {
 
   indices.forEach((origIdx) => appendResultRow(results[origIdx], origIdx + 1));
 
-  // Update header sort indicators.
+  // Update header sort indicators and aria-sort.
   resultsTable.querySelectorAll('th[data-col]').forEach((th) => {
     th.classList.remove('sort-asc', 'sort-desc');
     const ind = th.querySelector('.sort-indicator');
     if (th.dataset.col === sortCol) {
-      th.classList.add(sortDir === 1 ? 'sort-asc' : 'sort-desc');
-      if (ind) ind.textContent = sortDir === 1 ? '↑' : '↓';
+      const asc = sortDir === 1;
+      th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+      th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+      if (ind) ind.textContent = asc ? '↑' : '↓';
     } else {
+      th.setAttribute('aria-sort', 'none');
       if (ind) ind.textContent = '↕';
     }
   });
@@ -2093,9 +2097,9 @@ function refreshResultsPanel() {
   btnClear.disabled       = !hasResults;
 }
 
-// Sort by column header click.
+// Sort by column header click or keyboard activation (Enter / Space).
 resultsTable.querySelectorAll('th[data-col]').forEach((th) => {
-  th.addEventListener('click', () => {
+  const activate = () => {
     const col = th.dataset.col;
     if (sortCol === col) {
       sortDir = -sortDir;
@@ -2104,6 +2108,13 @@ resultsTable.querySelectorAll('th[data-col]').forEach((th) => {
       sortDir = 1;
     }
     if (results.length) renderResultsTable();
+  };
+  th.addEventListener('click', activate);
+  th.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate();
+    }
   });
 });
 
