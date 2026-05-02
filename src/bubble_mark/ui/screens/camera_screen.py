@@ -1,14 +1,53 @@
-"""Camera / image import screen."""
+"""Camera / image import screen.
+
+On Android the screen opens a live CameraX viewfinder with an OpenCV overlay
+that highlights the detected bubble-sheet page contour in real time.  A
+"Capture" button freezes the current frame and feeds it into the grading
+pipeline.
+
+On desktop the "Open Camera" button falls back to a file-import dialog so the
+rest of the workflow can be exercised without camera hardware.
+"""
 from __future__ import annotations
 
+import io
+import sys
 from typing import TYPE_CHECKING
 
+import numpy as np
 import toga
 from toga.style import Pack
 from toga.style.pack import COLUMN, ROW
 
 if TYPE_CHECKING:
     from bubble_mark.ui.app import BubbleMarkApp
+
+
+def _is_android() -> bool:
+    return sys.platform == "android" or "ANDROID_DATA" in __import__("os").environ
+
+
+def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
+    """Return a copy of *rgb* with a green page-contour overlay if found."""
+    try:
+        import cv2
+        from bubble_mark.processing.image_utils import find_page_contour
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+        contour = find_page_contour(bgr)
+        if contour is not None:
+            cv2.drawContours(bgr, [contour], -1, (0, 255, 0), 3)
+        return cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+    except Exception:
+        return rgb
+
+
+def _numpy_to_toga_image(rgb: np.ndarray) -> toga.Image:
+    """Convert an HxWx3 uint8 RGB array to a ``toga.Image``."""
+    from PIL import Image as PILImage
+    pil = PILImage.fromarray(rgb, mode="RGB")
+    buf = io.BytesIO()
+    pil.save(buf, format="PNG")
+    return toga.Image(data=buf.getvalue())
 
 
 def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
@@ -20,15 +59,80 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
         style=Pack(padding_bottom=10, font_size=18),
     )
     status_label = toga.Label(
-        "No images captured",
-        style=Pack(padding_bottom=10),
+        "Press 'Open Camera' to start the live viewfinder.",
+        style=Pack(padding_bottom=8),
     )
 
-    def import_image(widget: toga.Widget) -> None:
-        status_label.text = "Import not yet implemented in this build."
+    # Live viewfinder widget (updated each frame on Android).
+    image_view = toga.ImageView(style=Pack(flex=1))
 
-    def process_images(widget: toga.Widget) -> None:
+    # Thread-safe reference to the latest raw RGB frame for capture.
+    _last_frame: list[np.ndarray | None] = [None]
+
+    # ------------------------------------------------------------------ #
+    # Frame callback – called on a CameraX worker thread                  #
+    # ------------------------------------------------------------------ #
+
+    def _on_frame(rgb: np.ndarray) -> None:
+        _last_frame[0] = rgb.copy()
+        annotated = _draw_overlay(rgb)
+        toga_img = _numpy_to_toga_image(annotated)
+
+        def _update(_=None) -> None:
+            image_view.image = toga_img
+            status_label.text = "Live preview — point at a bubble sheet."
+
+        app.loop.call_soon_threadsafe(_update)
+
+    # ------------------------------------------------------------------ #
+    # Button callbacks                                                     #
+    # ------------------------------------------------------------------ #
+
+    def open_camera(widget: toga.Widget) -> None:
+        if _is_android():
+            from bubble_mark.ui.camerax_bridge import start_camera
+            status_label.text = "Starting camera…"
+            start_camera(_on_frame)
+        else:
+            _import_from_file()
+
+    def _import_from_file() -> None:
+        async def _pick() -> None:
+            try:
+                result = await app.main_window.open_file_dialog(
+                    title="Open bubble-sheet image",
+                    file_types=["jpg", "jpeg", "png", "bmp"],
+                )
+            except Exception:
+                status_label.text = "File import cancelled."
+                return
+            if result is None:
+                status_label.text = "File import cancelled."
+                return
+            try:
+                import cv2
+                bgr = cv2.imread(str(result))
+                if bgr is None:
+                    raise ValueError("Could not decode image.")
+                rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+                _on_frame(rgb)
+                status_label.text = f"Loaded: {result.name}"
+            except Exception as exc:
+                status_label.text = f"Error loading image: {exc}"
+
+        import asyncio
+        asyncio.ensure_future(_pick())
+
+    def capture(widget: toga.Widget) -> None:
+        frame = _last_frame[0]
+        if frame is None:
+            status_label.text = "No frame to capture yet."
+            return
+        _grade_frame(frame)
+
+    def _grade_frame(rgb: np.ndarray) -> None:
         try:
+            import cv2
             from bubble_mark.processing.analyzer import BubbleAnalyzer
             from bubble_mark.processing.detector import BubbleSheetDetector
             from bubble_mark.processing.grader import BubbleSheetGrader
@@ -40,18 +144,37 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
             status_label.text = "Please configure an answer key in Settings first."
             return
 
+        bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         detector = BubbleSheetDetector(app.app_settings.layout_config)
         analyzer = BubbleAnalyzer(app.app_settings.fill_threshold)
-        grader = BubbleSheetGrader(app.answer_key, detector, analyzer)  # noqa: F841
-        status_label.text = "Processing complete (no images loaded)."
+        grader = BubbleSheetGrader(app.answer_key, detector, analyzer)
+        try:
+            result = grader.grade(bgr)
+            app.results = [result]
+            status_label.text = (
+                f"Graded: {result.num_correct}/{result.num_questions} correct."
+            )
+            app.go_results()
+        except Exception as exc:
+            status_label.text = f"Grading failed: {exc}"
 
-    btn_row = toga.Box(style=Pack(direction=ROW, padding_bottom=10))
+    def stop_camera(widget: toga.Widget) -> None:
+        from bubble_mark.ui.camerax_bridge import stop_camera as _stop
+        _stop()
+        status_label.text = "Camera stopped."
+
+    # ------------------------------------------------------------------ #
+    # Layout                                                               #
+    # ------------------------------------------------------------------ #
+
+    btn_row = toga.Box(style=Pack(direction=ROW, padding_bottom=8, gap=8))
     btn_row.add(
-        toga.Button("Capture / Import", on_press=import_image, style=Pack(flex=1, padding_right=5)),
-        toga.Button("Process All", on_press=process_images, style=Pack(flex=1)),
+        toga.Button("Open Camera", on_press=open_camera, style=Pack(flex=1)),
+        toga.Button("Capture", on_press=capture, style=Pack(flex=1)),
+        toga.Button("Stop", on_press=stop_camera, style=Pack(flex=1)),
     )
 
     btn_back = toga.Button("Back", on_press=lambda w: app.go_home())
 
-    box.add(title, status_label, btn_row, btn_back)
+    box.add(title, image_view, status_label, btn_row, btn_back)
     return box
