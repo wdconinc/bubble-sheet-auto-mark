@@ -1270,13 +1270,39 @@ const btnRegrade        = $('btn-regrade');
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function loadVersion() {
-  const SHORT_HASH_LENGTH = 7;
   try {
     const resp = await fetch('./version.json');
     if (!resp.ok) return;
-    const { hash, tag, message } = await resp.json();
-    const shortHash = hash ? hash.slice(0, SHORT_HASH_LENGTH) : null;
-    const label = tag || shortHash;
+    const { hash, describe, message } = await resp.json();
+    if (!describe && !hash) return;
+
+    // Parse `git describe --tags --always` output.
+    // With commits after a tag: "v1.2.3-5-gabcdef7"  →  nearestTag="v1.2.3", distance=5
+    // Exactly on a tag:         "v1.2.3"             →  no match; describe IS the tag
+    // Without any tags:         "abcdef7"            →  no match; describe IS a short hash
+    const describeMatch = describe && describe.match(/^(.*)-(\d+)-g([0-9a-f]+)$/);
+    let label, linkHref;
+    if (describeMatch) {
+      const [, nearestTag, distStr, abbrevHash] = describeMatch;
+      const distance = parseInt(distStr, 10);
+      label = `${nearestTag}+${distance}`;
+      // Use the full hash if available, fall back to the abbreviated hash from describe.
+      const commitHash = hash || abbrevHash;
+      linkHref = `https://github.com/wdconinc/bubble-sheet-auto-mark/commit/${commitHash}`;
+    } else {
+      // Exactly on a tag (label = tag name) or no tags at all (label = short hash).
+      // Detect hash-only output: describe will equal the leading chars of the full hash.
+      // (isHash is only true when hash is truthy, since we test hash.startsWith(...))
+      const isHash = hash && hash.startsWith(describe || '');
+      if (isHash) {
+        // Normalize to a fixed 7-char length to avoid a variable-width label.
+        label = hash.slice(0, 7);
+        linkHref = `https://github.com/wdconinc/bubble-sheet-auto-mark/commit/${hash}`;
+      } else {
+        label = describe || null;
+        linkHref = `https://github.com/wdconinc/bubble-sheet-auto-mark/releases/tag/${label}`;
+      }
+    }
     if (!label) return;
 
     const hashEl   = $('version-hash');
@@ -1285,9 +1311,7 @@ async function loadVersion() {
     const barEl    = $('version-bar');
 
     hashEl.textContent = label;
-    linkEl.href = hash
-      ? `https://github.com/wdconinc/bubble-sheet-auto-mark/commit/${hash}`
-      : `https://github.com/wdconinc/bubble-sheet-auto-mark/releases/tag/${tag}`;
+    linkEl.href = linkHref;
     if (message) msgEl.textContent = message;
     barEl.classList.remove('hidden');
   } catch (_) {}
