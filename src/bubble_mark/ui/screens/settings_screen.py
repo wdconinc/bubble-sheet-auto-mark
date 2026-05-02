@@ -1,109 +1,81 @@
 """Settings screen: configure layout, answer key, thresholds."""
 from __future__ import annotations
 
-from kivy.lang import Builder
-from kivy.uix.screenmanager import Screen
+from typing import TYPE_CHECKING
 
-Builder.load_string("""
-<SettingsScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        padding: 15
-        spacing: 8
+import toga
+from toga.style import Pack
+from toga.style.pack import COLUMN, ROW
 
-        Label:
-            text: 'Settings'
-            font_size: '20sp'
-            size_hint_y: 0.07
-
-        GridLayout:
-            cols: 2
-            size_hint_y: 0.45
-            spacing: 5
-
-            Label:
-                text: 'Number of Questions'
-            TextInput:
-                id: num_questions
-                text: '30'
-                input_filter: 'int'
-                multiline: False
-
-            Label:
-                text: 'Number of Choices (A-E=5)'
-            TextInput:
-                id: num_choices
-                text: '5'
-                input_filter: 'int'
-                multiline: False
-
-            Label:
-                text: 'ID Digits'
-            TextInput:
-                id: num_id_digits
-                text: '9'
-                input_filter: 'int'
-                multiline: False
-
-            Label:
-                text: 'Fill Threshold (0-1)'
-            TextInput:
-                id: fill_threshold
-                text: '0.5'
-                multiline: False
-
-        Label:
-            text: 'Answer Key (string of 1-5 or A-E)'
-            size_hint_y: 0.05
-
-        TextInput:
-            id: answer_key_input
-            hint_text: 'e.g. 134521345213452...'
-            size_hint_y: 0.12
-            multiline: False
-
-        Label:
-            id: status_label
-            text: ''
-            size_hint_y: 0.05
-
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint_y: 0.1
-            spacing: 8
-            Button:
-                text: 'Save Settings'
-                on_press: root.save_settings()
-            Button:
-                text: 'Back'
-                on_press: app.go_home()
-""")
+if TYPE_CHECKING:
+    from bubble_mark.ui.app import BubbleMarkApp
 
 
-class SettingsScreen(Screen):
-    """Screen for configuring application settings and answer key."""
+def build_settings_screen(app: BubbleMarkApp) -> toga.Box:
+    """Return a Box containing the settings screen UI."""
+    box = toga.Box(style=Pack(direction=COLUMN, padding=15))
 
-    def save_settings(self):
-        from kivy.app import App as KivyApp
+    title = toga.Label(
+        "Settings",
+        style=Pack(padding_bottom=10, font_size=18),
+    )
+
+    def _row(label_text: str, input_widget: toga.Widget) -> toga.Box:
+        row = toga.Box(style=Pack(direction=ROW, padding_bottom=6))
+        row.add(
+            toga.Label(label_text, style=Pack(flex=1)),
+            input_widget,
+        )
+        return row
+
+    inp_questions = toga.TextInput(value="30", style=Pack(width=80))
+    inp_choices = toga.TextInput(value="5", style=Pack(width=80))
+    inp_id_digits = toga.TextInput(value="9", style=Pack(width=80))
+    inp_threshold = toga.TextInput(value="0.5", style=Pack(width=80))
+    inp_answer_key = toga.TextInput(
+        placeholder="e.g. 134521345213452...",
+        style=Pack(padding_bottom=10),
+    )
+    status_label = toga.Label("", style=Pack(padding_bottom=6))
+
+    def save_settings(widget: toga.Widget) -> None:
         from bubble_mark.models.answer_key import AnswerKey
         from bubble_mark.models.settings import AppSettings
 
-        app = KivyApp.get_running_app()
         try:
             layout = {
-                "num_questions": int(self.ids.num_questions.text or 30),
-                "num_choices": int(self.ids.num_choices.text or 5),
-                "num_id_digits": int(self.ids.num_id_digits.text or 9),
+                "num_questions": int(inp_questions.value or 30),
+                "num_choices": int(inp_choices.value or 5),
+                "num_id_digits": int(inp_id_digits.value or 9),
                 "id_choices_per_digit": 10,
             }
-            threshold = float(self.ids.fill_threshold.text or 0.5)
-            app.settings = AppSettings(
+            threshold = float(inp_threshold.value or 0.5)
+            app.app_settings = AppSettings(
                 layout_config=layout,
                 fill_threshold=threshold,
             )
-            key_text = self.ids.answer_key_input.text.strip()
+            key_text = inp_answer_key.value.strip()
             if key_text:
                 app.answer_key = AnswerKey(key_text)
-            self.ids.status_label.text = "Settings saved."
+            status_label.text = "Settings saved."
         except Exception as exc:
-            self.ids.status_label.text = f"Error: {exc}"
+            status_label.text = f"Error: {exc}"
+
+    btn_row = toga.Box(style=Pack(direction=ROW, padding_top=6))
+    btn_row.add(
+        toga.Button("Save Settings", on_press=save_settings, style=Pack(flex=1, padding_right=5)),
+        toga.Button("Back", on_press=lambda w: app.go_home(), style=Pack(flex=1)),
+    )
+
+    box.add(
+        title,
+        _row("Number of Questions", inp_questions),
+        _row("Number of Choices (A-E=5)", inp_choices),
+        _row("ID Digits", inp_id_digits),
+        _row("Fill Threshold (0-1)", inp_threshold),
+        toga.Label("Answer Key (string of 1-5 or A-E)", style=Pack(padding_bottom=4)),
+        inp_answer_key,
+        status_label,
+        btn_row,
+    )
+    return box

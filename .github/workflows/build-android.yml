@@ -1,0 +1,72 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install Briefcase
+        run: pip install briefcase
+
+      - name: Cache Briefcase tools and SDKs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/briefcase
+          key: ${{ runner.os }}-briefcase-${{ hashFiles('pyproject.toml') }}
+
+      - name: Create Android project
+        run: briefcase create android
+
+      - name: Build Android APK
+        run: briefcase build android
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bubble-sheet-auto-mark-apk
+          path: build/bubble-mark/android/gradle/app/build/outputs/apk/**/*.apk
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bubble-sheet-auto-mark-apk
+          path: apk
+
+      - name: Upload APK to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apk/**/*.apk

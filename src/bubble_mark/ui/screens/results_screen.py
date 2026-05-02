@@ -1,93 +1,56 @@
 """Results screen: display and export grading results."""
 from __future__ import annotations
 
-from kivy.lang import Builder
-from kivy.uix.screenmanager import Screen
+from typing import TYPE_CHECKING
 
-Builder.load_string("""
-<ResultsScreen>:
-    BoxLayout:
-        orientation: 'vertical'
-        padding: 10
-        spacing: 8
+import toga
+from toga.style import Pack
+from toga.style.pack import COLUMN, ROW
 
-        Label:
-            text: 'Results'
-            font_size: '20sp'
-            size_hint_y: 0.08
-
-        ScrollView:
-            size_hint_y: 0.72
-            GridLayout:
-                id: results_grid
-                cols: 3
-                size_hint_y: None
-                height: self.minimum_height
-                row_default_height: 30
-
-        Label:
-            id: status_label
-            text: ''
-            size_hint_y: 0.06
-
-        BoxLayout:
-            orientation: 'horizontal'
-            size_hint_y: 0.1
-            spacing: 8
-            Button:
-                text: 'Export CSV'
-                on_press: root.export_csv()
-            Button:
-                text: 'Clear Results'
-                on_press: root.clear_results()
-            Button:
-                text: 'Back'
-                on_press: app.go_home()
-""")
+if TYPE_CHECKING:
+    from bubble_mark.ui.app import BubbleMarkApp
 
 
-class ResultsScreen(Screen):
-    """Screen showing a list of graded results with export functionality."""
+def build_results_screen(app: BubbleMarkApp) -> toga.Box:
+    """Return a Box containing the results screen UI."""
+    box = toga.Box(style=Pack(direction=COLUMN, padding=10))
 
-    def on_enter(self):
-        self._refresh()
+    title = toga.Label("Results", style=Pack(padding_bottom=8, font_size=18))
+    status_label = toga.Label("", style=Pack(padding_bottom=6))
 
-    def _refresh(self):
-        from kivy.app import App as KivyApp
-        from kivy.uix.label import Label
+    table = toga.Table(
+        headings=["Student ID", "Answers", "Score"],
+        data=[
+            (r.student_id, r.answers, f"{r.score:.1%}" if r.score is not None else "-")
+            for r in app.results
+        ],
+        style=Pack(flex=1, padding_bottom=8),
+    )
 
-        app = KivyApp.get_running_app()
-        grid = self.ids.results_grid
-        grid.clear_widgets()
-
-        # Header row
-        for header in ("Student ID", "Answers", "Score"):
-            grid.add_widget(Label(text=header, bold=True))
-
-        for r in app.results:
-            grid.add_widget(Label(text=r.student_id))
-            grid.add_widget(Label(text=r.answers))
-            score_txt = f"{r.score:.1%}" if r.score is not None else "-"
-            grid.add_widget(Label(text=score_txt))
-
-    def export_csv(self):
-        from kivy.app import App as KivyApp
+    def export_csv(widget: toga.Widget) -> None:
         from bubble_mark.export.csv_exporter import CSVExporter
 
-        app = KivyApp.get_running_app()
         if not app.results:
-            self.ids.status_label.text = "No results to export."
+            status_label.text = "No results to export."
             return
         try:
             path = "results.csv"
             CSVExporter().export(app.results, path)
-            self.ids.status_label.text = f"Exported to {path}"
+            status_label.text = f"Exported to {path}"
         except Exception as exc:
-            self.ids.status_label.text = f"Export error: {exc}"
+            status_label.text = f"Export error: {exc}"
 
-    def clear_results(self):
-        from kivy.app import App as KivyApp
-        app = KivyApp.get_running_app()
+    def clear_results(widget: toga.Widget) -> None:
         app.results.clear()
-        self._refresh()
-        self.ids.status_label.text = "Results cleared."
+        table.data = []
+        status_label.text = "Results cleared."
+
+    btn_row = toga.Box(style=Pack(direction=ROW, padding_top=4))
+    btn_row.add(
+        toga.Button("Export CSV", on_press=export_csv, style=Pack(flex=1, padding_right=5)),
+        toga.Button("Clear Results", on_press=clear_results, style=Pack(flex=1, padding_right=5)),
+        toga.Button("Back", on_press=lambda w: app.go_home(), style=Pack(flex=1)),
+    )
+
+    box.add(title, table, status_label, btn_row)
+    return box

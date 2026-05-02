@@ -10,22 +10,67 @@ readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
-    "opencv-python-headless>=4.8",
     "numpy>=1.26",
     "Pillow>=10.0",
 ]
 
+[project.scripts]
+bubble-mark = "bubble_mark.ui.app:main"
+
 [project.optional-dependencies]
-kivy = [
-    "kivy==2.3.1",
+toga = [
+    "toga>=0.4",
 ]
 dev = [
+    "briefcase>=0.3",
+    "opencv-python-headless>=4.8",
     "pytest>=8.0",
     "pytest-cov>=4.0",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.briefcase]
+project_name = "Bubble Sheet Auto-Mark"
+bundle = "com.wdconinc"
+version = "0.1.0"
+url = "https://github.com/wdconinc/bubble-sheet-auto-mark"
+license.file = "LICENSE"
+
+[tool.briefcase.app.bubble-mark]
+formal_name = "Bubble Sheet Auto-Mark"
+description = "Cross-platform bubble sheet auto-marking application"
+sources = ["src/bubble_mark"]
+requires = [
+    "numpy>=1.26",
+    "Pillow>=10.0",
+]
+
+[tool.briefcase.app.bubble-mark.linux]
+requires = [
+    "toga>=0.4",
+    "opencv-python-headless>=4.8",
+]
+
+[tool.briefcase.app.bubble-mark.macOS]
+requires = [
+    "toga>=0.4",
+    "opencv-python-headless>=4.8",
+]
+
+[tool.briefcase.app.bubble-mark.windows]
+requires = [
+    "toga>=0.4",
+    "opencv-python-headless>=4.8",
+]
+
+[tool.briefcase.app.bubble-mark.android]
+requires = [
+    "toga-android>=0.4",
+    # opencv-python-headless is excluded from Android; image processing
+    # on Android uses a stub pending a compatible native build.
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
