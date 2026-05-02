@@ -20,11 +20,11 @@ GITHUB_REPO = "wdconinc/bubble-sheet-auto-mark"
 _GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 
-def get_latest_release() -> tuple[str, str | None]:
-    """Query the GitHub Releases API and return (latest_version, apk_url).
+def get_latest_release() -> tuple[str | None, str | None]:
+    """Query the GitHub Releases API and return ``(latest_version, apk_url)``.
 
-    Returns ``("0.0.0", None)`` on any network or HTTP error so the app
-    never crashes when offline or when the API is unavailable.
+    Returns ``(None, None)`` on any network or HTTP error so callers can
+    distinguish a genuine error from a real ``v0.0.0`` release.
     """
     try:
         req = urllib.request.Request(
@@ -47,7 +47,7 @@ def get_latest_release() -> tuple[str, str | None]:
         )
         return latest_version, apk_url
     except (urllib.error.URLError, KeyError, ValueError):
-        return "0.0.0", None
+        return None, None
 
 
 def _parse_version(v: str) -> tuple[int, int, int]:
@@ -71,12 +71,102 @@ def _parse_version(v: str) -> tuple[int, int, int]:
 
 
 def is_update_available() -> tuple[bool, str | None]:
-    """Return ``(update_available, apk_url)`` by comparing against the latest release."""
+    """Return ``(update_available, apk_url)`` by comparing against the latest release.
+
+    Returns ``(False, None)`` when the release API is unreachable.
+    """
     latest_version, apk_url = get_latest_release()
+    if latest_version is None:
+        return False, None
     return _parse_version(latest_version) > _parse_version(CURRENT_VERSION), apk_url
 
 
-def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
+def _schedule_coro(app_instance: Any, coro: Any) -> None:
+    """Schedule an async *coro* on the app's event loop from a worker thread."""
+    app_instance.loop.call_soon_threadsafe(
+        lambda: app_instance.loop.create_task(coro)
+    )
+
+
+def _handle_update_result(
+    app_instance: Any,
+    latest_version: str | None,
+    apk_url: str | None,
+    *,
+    silent: bool,
+) -> None:
+    """Decide which dialog to show (if any) based on the update-check result.
+
+    Called from a worker thread.  When *silent* is ``True`` only the
+    "update available" prompt is shown; "up to date" and error outcomes are
+    silently ignored (legacy Android startup-check behaviour).
+
+    When *silent* is ``False`` every outcome surfaces a dialog so the user
+    always receives clear feedback from an explicit check.
+    """
+    import toga  # optional dependency; imported here so tests stay headless
+
+    on_android = (
+        sys.platform == "linux" and importlib.util.find_spec("android") is not None
+    )
+
+    if latest_version is None:
+        # Network or API error
+        if silent:
+            return
+
+        async def _show_error() -> None:
+            await app_instance.main_window.dialog(
+                toga.InfoDialog(
+                    "Update Check Failed",
+                    "Could not retrieve update information.\n"
+                    "Please check your network connection and try again.",
+                )
+            )
+
+        _schedule_coro(app_instance, _show_error())
+        return
+
+    update_available = _parse_version(latest_version) > _parse_version(CURRENT_VERSION)
+
+    if not update_available:
+        if silent:
+            return
+
+        async def _show_up_to_date() -> None:
+            await app_instance.main_window.dialog(
+                toga.InfoDialog(
+                    "No Update Available",
+                    f"You are already running the latest version ({CURRENT_VERSION}).",
+                )
+            )
+
+        _schedule_coro(app_instance, _show_up_to_date())
+        return
+
+    # An update is available.
+    # Silent (startup) mode on Android requires an APK URL to be actionable.
+    if silent and not apk_url:
+        return
+
+    async def _show_update_available() -> None:
+        result = await app_instance.main_window.dialog(
+            toga.QuestionDialog(
+                "Update Available",
+                f"A new version ({latest_version}) is available.\n"
+                "Would you like to download it now?",
+            )
+        )
+        if result:
+            if on_android and apk_url:
+                _open_url(apk_url)
+            else:
+                webbrowser.open(f"https://github.com/{GITHUB_REPO}/releases/latest")
+
+    _schedule_coro(app_instance, _show_update_available())
+
+
+def check_and_prompt_update(app_instance: Any) -> None:
     """Check for an update and, on Android, prompt the user to download it.
 
     On non-Android platforms this function returns immediately without
@@ -87,24 +177,8 @@ def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
         return
 
     def _check() -> None:
-        update_available, apk_url = is_update_available()
-        if not update_available or not apk_url:
-            return
-
-        async def _show_dialog() -> None:
-            result = await app_instance.main_window.dialog(
-                toga.QuestionDialog(
-                    "Update Available",
-                    "A new version is available.\nWould you like to download it?",
-                )
-            )
-            if result:
-                _open_url(apk_url)
-
-        import toga
-        app_instance.loop.call_soon_threadsafe(
-            lambda: app_instance.loop.create_task(_show_dialog())
-        )
+        latest_version, apk_url = get_latest_release()
+        _handle_update_result(app_instance, latest_version, apk_url, silent=True)
 
     threading.Thread(target=_check, daemon=True).start()
 
@@ -125,56 +199,8 @@ def check_for_updates(app_instance: Any) -> None:
       being swallowed silently.
     """
     def _check() -> None:
-        import toga  # optional dependency; import inside worker thread
-
         latest_version, apk_url = get_latest_release()
-
-        async def _show_up_to_date() -> None:
-            await app_instance.main_window.dialog(
-                toga.InfoDialog(
-                    "No Update Available",
-                    f"You are already running the latest version ({CURRENT_VERSION}).",
-                )
-            )
-
-        async def _show_error() -> None:
-            await app_instance.main_window.dialog(
-                toga.InfoDialog(
-                    "Update Check Failed",
-                    "Could not retrieve update information.\n"
-                    "Please check your network connection and try again.",
-                )
-            )
-
-        async def _show_update_available() -> None:
-            result = await app_instance.main_window.dialog(
-                toga.QuestionDialog(
-                    "Update Available",
-                    f"A new version ({latest_version}) is available.\n"
-                    "Would you like to download it now?",
-                )
-            )
-            if result:
-                on_android = (
-                    sys.platform == "linux"
-                    and importlib.util.find_spec("android") is not None
-                )
-                if on_android and apk_url:
-                    _open_url(apk_url)
-                else:
-                    releases_url = f"https://github.com/{GITHUB_REPO}/releases/latest"
-                    webbrowser.open(releases_url)
-
-        if latest_version == "0.0.0":
-            coro = _show_error()
-        elif _parse_version(latest_version) > _parse_version(CURRENT_VERSION):
-            coro = _show_update_available()
-        else:
-            coro = _show_up_to_date()
-
-        app_instance.loop.call_soon_threadsafe(
-            lambda: app_instance.loop.create_task(coro)
-        )
+        _handle_update_result(app_instance, latest_version, apk_url, silent=False)
 
     threading.Thread(target=_check, daemon=True).start()
 

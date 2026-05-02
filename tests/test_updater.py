@@ -110,14 +110,14 @@ class TestGetLatestRelease:
     def test_returns_fallback_on_url_error(self):
         with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")):
             version, apk_url = get_latest_release()
-        assert version == "0.0.0"
+        assert version is None
         assert apk_url is None
 
     def test_returns_fallback_on_missing_tag_name(self):
         data = {"assets": []}  # no tag_name key
         with patch("urllib.request.urlopen", return_value=_make_response(data)):
             version, apk_url = get_latest_release()
-        assert version == "0.0.0"
+        assert version is None
         assert apk_url is None
 
     def test_returns_fallback_on_invalid_json(self):
@@ -127,7 +127,7 @@ class TestGetLatestRelease:
         mock_resp.__exit__ = MagicMock(return_value=False)
         with patch("urllib.request.urlopen", return_value=mock_resp):
             version, apk_url = get_latest_release()
-        assert version == "0.0.0"
+        assert version is None
         assert apk_url is None
 
     def test_returns_first_apk_asset(self):
@@ -175,9 +175,9 @@ class TestIsUpdateAvailable:
         assert available is False
 
     def test_no_update_on_network_error(self):
-        # get_latest_release returns "0.0.0" on error; "0.0.0" is older than
-        # the current version so no spurious update prompt is shown.
-        with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.0", None)):
+        # get_latest_release returns (None, None) on error; no spurious update
+        # prompt is shown and the function gracefully returns (False, None).
+        with patch("bubble_mark.updater.get_latest_release", return_value=(None, None)):
             available, apk_url = is_update_available()
         assert available is False
         assert apk_url is None
@@ -254,7 +254,7 @@ class TestCheckForUpdates:
     def test_shows_error_when_network_fails(self):
         app = _make_app_instance()
         with _mock_toga_context():
-            with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.0", None)):
+            with patch("bubble_mark.updater.get_latest_release", return_value=(None, None)):
                 check_for_updates(app)
 
         app.loop.create_task.assert_called_once()
