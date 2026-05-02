@@ -9,6 +9,8 @@ try:
     from toga.style import Pack
     from toga.style.pack import COLUMN
 except ModuleNotFoundError as exc:
+    if exc.name != "toga":
+        raise
     raise ModuleNotFoundError(
         "The 'toga' package is required to run the GUI. "
         "Install it with: pip install 'bubble-sheet-auto-mark[toga]'"
