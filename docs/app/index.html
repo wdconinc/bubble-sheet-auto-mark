@@ -1234,11 +1234,6 @@ btnGrade.addEventListener('click', async () => {
         'error'
       );
     } else {
-      results.push(result);
-      saveResults();
-      appendResultRow(result, results.length);
-      refreshResultsPanel();
-
       // Replace the preview canvas with the annotated overlay image.
       if (result.annotated_image_b64) {
         const img = new Image();
@@ -1250,6 +1245,14 @@ btnGrade.addEventListener('click', async () => {
         };
         img.src = 'data:image/png;base64,' + result.annotated_image_b64;
       }
+
+      // Strip the large base64 blob before persisting — it would exhaust
+      // localStorage quota (~5–10 MB limit) and cause saveResults() to fail.
+      const { annotated_image_b64: _dropped, ...resultToSave } = result;
+      results.push(resultToSave);
+      saveResults();
+      appendResultRow(resultToSave, results.length);
+      refreshResultsPanel();
 
       const scored = result.score != null;
       setStatus(

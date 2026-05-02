@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import logging
 from typing import TYPE_CHECKING
 
 import toga
@@ -11,6 +12,8 @@ from toga.style.pack import COLUMN, ROW
 
 if TYPE_CHECKING:
     from bubble_mark.ui.app import BubbleMarkApp
+
+logger = logging.getLogger(__name__)
 
 
 def build_results_screen(app: BubbleMarkApp) -> toga.Box:
@@ -25,8 +28,6 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
     _show_annotated = False
     if app.results and app.results[0].annotated_image is not None:
         try:
-            import logging
-
             import numpy as np
             from PIL import Image as PILImage
 
@@ -42,11 +43,7 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
             annotated_view.image = toga.Image(data=buf.getvalue())
             _show_annotated = True
         except (ImportError, ValueError, OSError) as exc:
-            import logging
-
-            logging.getLogger(__name__).warning(
-                "Could not render annotated image: %s", exc
-            )
+            logger.warning("Could not render annotated image: %s", exc)
 
     table = toga.Table(
         headings=["Student ID", "Answers", "Score"],
@@ -73,6 +70,7 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
     def clear_results(widget: toga.Widget) -> None:
         app.results.clear()
         table.data = []
+        annotated_view.image = None
         status_label.text = "Results cleared."
 
     btn_row = toga.Box(style=Pack(direction=ROW, padding_top=4))
