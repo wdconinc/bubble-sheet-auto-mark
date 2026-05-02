@@ -128,7 +128,7 @@ class TestApplyThreshold:
         binary_inv = apply_threshold(img, method="adaptive", invert=True)
         binary_fwd = apply_threshold(img, method="adaptive", invert=False)
         assert binary_inv[50, 50] == 255  # dark patch → foreground with invert=True
-        assert binary_fwd[50, 50] == 0    # dark patch → background with invert=False
+        assert binary_fwd[50, 50] == 0  # dark patch → background with invert=False
 
 
 # ---------------------------------------------------------------------------
@@ -303,7 +303,7 @@ class TestApplyThresholdNoCv2:
         binary_inv = apply_threshold(img, method="adaptive", invert=True)
         binary_fwd = apply_threshold(img, method="adaptive", invert=False)
         assert binary_inv[50, 50] == 255  # dark patch → foreground with invert=True
-        assert binary_fwd[50, 50] == 0    # dark patch → background with invert=False
+        assert binary_fwd[50, 50] == 0  # dark patch → background with invert=False
 
 
 class TestFindPageContourNoCv2:
