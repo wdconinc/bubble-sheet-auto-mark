@@ -19,6 +19,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -30,6 +32,14 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+
+      - name: Set version from git tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          # Patch [tool.briefcase] version (the only static version= line left;
+          # [project] version is derived dynamically by setuptools-scm).
+          sed -i "s/^version = \".*\"$/version = \"${TAG_VERSION}\"/" pyproject.toml
 
       - name: Install Briefcase
         run: pip install briefcase

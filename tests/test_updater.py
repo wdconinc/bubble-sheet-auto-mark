@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import bubble_mark.updater as updater_module
-from bubble_mark.updater import get_latest_release, is_update_available
+from bubble_mark.updater import _parse_version, get_latest_release, is_update_available
 
 
 # ---------------------------------------------------------------------------
@@ -24,6 +24,35 @@ def _make_response(data: dict) -> MagicMock:
     mock_resp.__enter__ = lambda s: s
     mock_resp.__exit__ = MagicMock(return_value=False)
     return mock_resp
+
+
+# ---------------------------------------------------------------------------
+# _parse_version
+# ---------------------------------------------------------------------------
+
+class TestParseVersion:
+    def test_plain_release(self):
+        assert _parse_version("1.2.3") == (1, 2, 3)
+
+    def test_pads_short_version(self):
+        assert _parse_version("1.2") == (1, 2, 0)
+
+    def test_dev_version_stripped(self):
+        # setuptools-scm produces versions like "0.2.1.dev3+gabcdef"
+        assert _parse_version("0.2.1.dev3+gabcdef") == (0, 2, 1)
+
+    def test_dev_only_fallback(self):
+        # "0.0.0.dev0" is the configured fallback_version for untagged checkouts
+        assert _parse_version("0.0.0.dev0") == (0, 0, 0)
+
+    def test_local_segment_stripped(self):
+        assert _parse_version("1.0.0+local") == (1, 0, 0)
+
+    def test_malformed_returns_zero(self):
+        assert _parse_version("not-a-version") == (0, 0, 0)
+
+    def test_empty_string(self):
+        assert _parse_version("") == (0, 0, 0)
 
 
 # ---------------------------------------------------------------------------
@@ -128,9 +157,9 @@ class TestIsUpdateAvailable:
 
     def test_no_update_when_latest_is_older(self):
         # A server returning a downgraded version must not prompt an update.
-        with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)):
-            available, _ = is_update_available()
-        # 0.0.1 is not newer than the current version (>= 0.1.0)
+        with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0"):
+            with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)):
+                available, _ = is_update_available()
         assert available is False
 
     def test_partial_version_treated_as_padded(self):
@@ -147,6 +176,21 @@ class TestIsUpdateAvailable:
             available, apk_url = is_update_available()
         assert available is False
         assert apk_url is None
+
+    def test_no_update_when_current_is_dev_build(self):
+        # A dev build of 1.0.0 should not be prompted to update to 1.0.0 release.
+        with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0.dev3+gabcdef"):
+            with patch("bubble_mark.updater.get_latest_release", return_value=("1.0.0", None)):
+                available, _ = is_update_available()
+        assert available is False
+
+    def test_update_available_when_dev_build_has_newer_release(self):
+        # A dev build of 1.0.0 should still be prompted to update to 1.1.0.
+        with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0.dev3+gabcdef"):
+            with patch("bubble_mark.updater.get_latest_release", return_value=("1.1.0", "https://example.com/app.apk")):
+                available, apk_url = is_update_available()
+        assert available is True
+        assert apk_url == "https://example.com/app.apk"
 
     def test_apk_url_propagated(self):
         with patch("bubble_mark.updater.get_latest_release", return_value=("2.0.0", "https://example.com/app.apk")):

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import threading
 import urllib.error
@@ -51,10 +52,17 @@ def get_latest_release() -> tuple[str, str | None]:
 def _parse_version(v: str) -> tuple[int, int, int]:
     """Parse a dotted-version string into a normalised 3-tuple of ints.
 
-    Pads short versions (e.g. ``"1.2"`` → ``(1, 2, 0)``) and returns
-    ``(0, 0, 0)`` for any malformed input so comparisons remain consistent.
+    Strips PEP 440 pre-release, dev, and local segments before parsing
+    (e.g. ``"1.2.3.dev4+gabcdef"`` → ``(1, 2, 3)``).  Pads short versions
+    (e.g. ``"1.2"`` → ``(1, 2, 0)``) and returns ``(0, 0, 0)`` for any
+    malformed input so comparisons remain consistent.
     """
-    parts = (v.split(".") + ["0", "0", "0"])[:3]
+    # Extract the leading numeric release segment, discarding any
+    # pre/dev/post/local suffix that starts with a non-digit character.
+    release = re.split(r"[^0-9.]", v)[0].rstrip(".")
+    if not release:
+        return (0, 0, 0)
+    parts = (release.split(".") + ["0", "0", "0"])[:3]
     try:
         return (int(parts[0]), int(parts[1]), int(parts[2]))
     except ValueError:
