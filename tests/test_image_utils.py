@@ -98,6 +98,28 @@ class TestApplyThreshold:
         result = apply_threshold(img)
         assert result.ndim == 2
 
+    def test_invert_false_makes_bright_pixels_foreground(self):
+        # Bright center on dark background: with invert=False the bright region → 255.
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        img[30:70, 30:70] = 200  # bright rectangle
+        binary = apply_threshold(img, method="otsu", invert=False)
+        assert binary.ndim == 2
+        # Center pixels must be foreground (255)
+        assert binary[50, 50] == 255
+        # Corner pixels (dark background) must be background (0)
+        assert binary[5, 5] == 0
+
+    def test_invert_true_makes_dark_pixels_foreground(self):
+        # Dark center on bright background: with invert=True the dark region → 255.
+        img = np.full((100, 100, 3), 200, dtype=np.uint8)
+        img[30:70, 30:70] = 20  # dark rectangle
+        binary = apply_threshold(img, method="otsu", invert=True)
+        assert binary.ndim == 2
+        # Center pixels must be foreground (255)
+        assert binary[50, 50] == 255
+        # Corner pixels (bright background) must be background (0)
+        assert binary[5, 5] == 0
+
 
 # ---------------------------------------------------------------------------
 # order_points
@@ -157,14 +179,13 @@ class TestFindPageContour:
         # May return None on a blank white image
         assert result is None or isinstance(result, np.ndarray)
 
-    def test_dark_rectangle_detected(self):
-        img = np.full((400, 400, 3), 255, dtype=np.uint8)
-        # Draw a thick dark rectangle
-        cv2.rectangle(img, (40, 40), (360, 360), (0, 0, 0), 5)
+    def test_white_page_on_dark_background_detected(self):
+        # White rectangle centered in a dark frame — the real camera use case.
+        img = np.zeros((400, 400, 3), dtype=np.uint8)  # dark background
+        img[40:360, 40:360] = 230  # white page
         result = find_page_contour(img)
-        # Should find 4-point contour or None (threshold-dependent)
-        if result is not None:
-            assert result.shape[-1] == 2
+        assert result is not None
+        assert result.shape[-1] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +269,22 @@ class TestApplyThresholdNoCv2:
         assert binary.ndim == 2
         assert set(np.unique(binary)).issubset({0, 255})
 
+    def test_invert_false_makes_bright_pixels_foreground(self, no_cv2):
+        img = np.zeros((100, 100, 3), dtype=np.uint8)
+        img[30:70, 30:70] = 200  # bright rectangle
+        binary = apply_threshold(img, method="otsu", invert=False)
+        assert binary.ndim == 2
+        assert binary[50, 50] == 255
+        assert binary[5, 5] == 0
+
+    def test_invert_true_makes_dark_pixels_foreground(self, no_cv2):
+        img = np.full((100, 100, 3), 200, dtype=np.uint8)
+        img[30:70, 30:70] = 20  # dark rectangle
+        binary = apply_threshold(img, method="otsu", invert=True)
+        assert binary.ndim == 2
+        assert binary[50, 50] == 255
+        assert binary[5, 5] == 0
+
 
 class TestFindPageContourNoCv2:
     def test_blank_image_returns_none_or_array(self, no_cv2):
@@ -255,13 +292,13 @@ class TestFindPageContourNoCv2:
         result = find_page_contour(img)
         assert result is None or isinstance(result, np.ndarray)
 
-    def test_dark_region_detected(self, no_cv2):
-        # Use a large filled dark region so it clears the 10 % coverage threshold.
-        img = np.full((400, 400, 3), 255, dtype=np.uint8)
-        img[40:360, 40:360] = 0  # large dark rectangle
+    def test_white_page_on_dark_background_detected(self, no_cv2):
+        # White rectangle centered in a dark frame — the real camera use case.
+        img = np.zeros((400, 400, 3), dtype=np.uint8)  # dark background
+        img[40:360, 40:360] = 230  # white page
         result = find_page_contour(img)
-        if result is not None:
-            assert result.shape[-1] == 2
+        assert result is not None
+        assert result.shape[-1] == 2
 
 
 class TestPerspectiveTransformNoCv2:
