@@ -91,6 +91,7 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
     def open_camera(widget: toga.Widget) -> None:
         if _is_android():
             from bubble_mark.ui.camerax_bridge import start_camera
+            # start_camera is idempotent; repeated taps are safe.
             status_label.text = "Starting camera…"
             start_camera(_on_frame)
         else:
@@ -149,11 +150,18 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
         analyzer = BubbleAnalyzer(app.app_settings.fill_threshold)
         grader = BubbleSheetGrader(app.answer_key, detector, analyzer)
         try:
-            result = grader.grade(bgr)
+            result = grader.grade_image(bgr)
+            if result is None:
+                status_label.text = "Could not detect a bubble sheet in the image."
+                return
             app.results = [result]
             status_label.text = (
                 f"Graded: {result.num_correct}/{result.num_questions} correct."
             )
+            # Stop the camera before navigating away so the CameraX session
+            # is not left running against a discarded screen.
+            from bubble_mark.ui.camerax_bridge import stop_camera as _stop
+            _stop()
             app.go_results()
         except Exception as exc:
             status_label.text = f"Grading failed: {exc}"

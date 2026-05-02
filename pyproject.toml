@@ -69,8 +69,10 @@ requires = [
 requires = [
     "toga-android>=0.4",
     "Pillow>=10.0",
-    # opencv-python-headless is excluded from Android; OpenCV processing
-    # on Android operates on numpy arrays passed from the CameraX bridge.
+    "numpy>=1.26",
+    # opencv-python-headless Android wheels are provided by BeeWare mobile-forge.
+    # Without this, the contour overlay is silently skipped and grading is unavailable.
+    "opencv-python-headless>=4.8",
 ]
 gradle_extra_content = """
 dependencies {

@@ -41,17 +41,25 @@ def _is_android() -> bool:
 
 def _start_android(callback: FrameCallback) -> None:
     global _provider
+    # Idempotency guard: silently skip if the camera is already running.
+    if _provider is not None:
+        return
+
     from jnius import autoclass, PythonJavaClass, java_method  # type: ignore[import]
 
     ProcessCameraProvider = autoclass("androidx.camera.lifecycle.ProcessCameraProvider")
     ImageAnalysis = autoclass("androidx.camera.core.ImageAnalysis")
     CameraSelector = autoclass("androidx.camera.core.CameraSelector")
     ContextCompat = autoclass("androidx.core.content.ContextCompat")
+    Executors = autoclass("java.util.concurrent.Executors")
     # Briefcase's MainActivity is the lifecycle owner.
     MainActivity = autoclass("org.beeware.android.MainActivity")
 
     activity = MainActivity.sActivity
-    executor = ContextCompat.getMainExecutor(activity)
+    # Main executor: used only for bindToLifecycle (must run on UI thread).
+    main_executor = ContextCompat.getMainExecutor(activity)
+    # Background executor: used for frame analysis to avoid blocking the UI thread.
+    analysis_executor = Executors.newSingleThreadExecutor()
 
     class _Analyzer(PythonJavaClass):
         """Python implementation of ImageAnalysis.Analyzer."""
@@ -93,7 +101,8 @@ def _start_android(callback: FrameCallback) -> None:
         )
         .build()
     )
-    analysis.setAnalyzer(executor, analyzer)
+    # Use a background executor so numpy/OpenCV work never runs on the UI thread.
+    analysis.setAnalyzer(analysis_executor, analyzer)
 
     future = ProcessCameraProvider.getInstance(activity)
 
@@ -115,7 +124,8 @@ def _start_android(callback: FrameCallback) -> None:
                 import logging
                 logging.getLogger(__name__).error("CameraX bind failed: %s", exc)
 
-    future.addListener(_ProviderCallback(), executor)
+    # bindToLifecycle must be called on the main thread.
+    future.addListener(_ProviderCallback(), main_executor)
 
 
 def _stop_android() -> None:
