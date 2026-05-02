@@ -1372,7 +1372,7 @@ previewArea.addEventListener('dragover', (e) => {
 });
 
 previewArea.addEventListener('dragleave', (e) => {
-  if (!previewArea.contains(e.relatedTarget)) {
+  if (!(e.relatedTarget instanceof Node) || !previewArea.contains(e.relatedTarget)) {
     previewArea.classList.remove('drag-over');
   }
 });
