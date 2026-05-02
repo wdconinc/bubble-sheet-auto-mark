@@ -108,6 +108,76 @@ def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
     threading.Thread(target=_check, daemon=True).start()
 
 
+def check_for_updates(app_instance) -> None:  # noqa: ANN001
+    """Explicitly check for updates and show feedback to the user.
+
+    Unlike :func:`check_and_prompt_update`, this function is intended to be
+    called from an explicit user action (e.g. a menu item) and therefore
+    always shows a result dialog on all platforms:
+
+    * If an update is available the user is asked whether to download it.
+      On Android the APK is opened via the Intent system; on other platforms
+      the releases page is opened in the default browser.
+    * If no update is available a short "up to date" information dialog is
+      shown so the user gets clear feedback.
+    * Network or API errors are surfaced as an information dialog rather than
+      being swallowed silently.
+    """
+    def _check() -> None:
+        import toga  # optional dependency; import inside worker thread
+
+        latest_version, apk_url = get_latest_release()
+
+        async def _show_up_to_date() -> None:
+            await app_instance.main_window.dialog(
+                toga.InfoDialog(
+                    "No Update Available",
+                    f"You are already running the latest version ({CURRENT_VERSION}).",
+                )
+            )
+
+        async def _show_error() -> None:
+            await app_instance.main_window.dialog(
+                toga.InfoDialog(
+                    "Update Check Failed",
+                    "Could not retrieve update information.\n"
+                    "Please check your network connection and try again.",
+                )
+            )
+
+        async def _show_update_available() -> None:
+            result = await app_instance.main_window.dialog(
+                toga.QuestionDialog(
+                    "Update Available",
+                    f"A new version ({latest_version}) is available.\n"
+                    "Would you like to download it now?",
+                )
+            )
+            if result:
+                on_android = (
+                    sys.platform == "linux"
+                    and importlib.util.find_spec("android") is not None
+                )
+                if on_android and apk_url:
+                    _open_url(apk_url)
+                else:
+                    releases_url = f"https://github.com/{GITHUB_REPO}/releases/latest"
+                    webbrowser.open(releases_url)
+
+        if latest_version == "0.0.0":
+            coro = _show_error()
+        elif _parse_version(latest_version) > _parse_version(CURRENT_VERSION):
+            coro = _show_update_available()
+        else:
+            coro = _show_up_to_date()
+
+        app_instance.loop.call_soon_threadsafe(
+            lambda: app_instance.loop.create_task(coro)
+        )
+
+    threading.Thread(target=_check, daemon=True).start()
+
+
 def _open_url(url: str) -> None:
     """Open *url* using Android's Intent system, falling back to webbrowser."""
     try:

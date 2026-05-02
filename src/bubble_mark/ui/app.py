@@ -53,6 +53,15 @@ class BubbleMarkApp(toga.App):
 
         self.main_window = toga.MainWindow(title=self.formal_name)
         self.main_window.content = self._wrapper
+
+        # ── Help → Check for Updates menu command ─────────────────────────
+        check_updates_cmd = toga.Command(
+            lambda _: self._check_for_updates(),
+            text="Check for Updates…",
+            group=toga.Group.HELP,
+        )
+        self.commands.add(check_updates_cmd)
+
         self._set_screen(self._build_home())
         self.main_window.show()
 
@@ -68,6 +77,10 @@ class BubbleMarkApp(toga.App):
     def _trigger_update_check(self) -> None:
         from bubble_mark.updater import check_and_prompt_update
         check_and_prompt_update(self)
+
+    def _check_for_updates(self) -> None:
+        from bubble_mark.updater import check_for_updates
+        check_for_updates(self)
 
     # ------------------------------------------------------------------
     # Screen builders (each returns a toga.Box)
