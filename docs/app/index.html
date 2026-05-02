@@ -550,14 +550,17 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
 
     # Load reference image for cross-correlation alignment when provided.
     ref_bgr = None
+    ref_warning = None
     if reference_image_bytes_js is not None:
         try:
             ref_data = reference_image_bytes_js.to_py()
             ref_pil  = PILImage.open(io.BytesIO(ref_data)).convert('RGB')
             ref_rgb  = np.array(ref_pil, dtype=np.uint8)
             ref_bgr  = ref_rgb[:, :, ::-1].copy()
-        except Exception:
+        except Exception as exc:
+            print(f'[grade_sheet] reference image decode failed: {exc}', file=sys.stderr)
             ref_bgr = None
+            ref_warning = f'Reference image could not be loaded ({exc}); alignment skipped.'
 
     answer_key = AnswerKey(str(answer_key_str)) if answer_key_str else None
     detector = BubbleSheetDetector(
@@ -575,6 +578,10 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
         return 'null'
 
     out = result.to_dict()
+
+    # Surface any reference-image warning so the JS can display it.
+    if ref_warning is not None:
+        out['ref_warning'] = ref_warning
 
     # Encode the annotated overlay image as a base64 PNG so JavaScript can
     # draw it on the preview canvas without any additional round-trips.
@@ -848,7 +855,12 @@ function getSettings() {
     answerKey:            $('answer-key').value.trim(),
     answerRegion:         answerRegion,   // [x1, y1, x2, y2] or null
     idRegion:             idRegion,       // [x1, y1, x2, y2] or null
-    referenceColorChannel: parseInt($('ref-color-channel').value) || 1,
+    referenceColorChannel: (() => {
+      // parseInt may return 0 for channel "Blue (0)"; avoid the `|| 1` pattern
+      // that would treat 0 as falsy and incorrectly fall back to 1.
+      const v = parseInt($('ref-color-channel').value);
+      return Number.isFinite(v) ? v : 1;
+    })(),
   };
 }
 
@@ -1294,19 +1306,25 @@ btnGrade.addEventListener('click', async () => {
 
       // Strip the large base64 blob before persisting — it would exhaust
       // localStorage quota (~5–10 MB limit) and cause saveResults() to fail.
-      const { annotated_image_b64: _dropped, ...resultToSave } = result;
+      const { annotated_image_b64: _dropped, ref_warning: _ref_warning, ...resultToSave } = result;
       results.push(resultToSave);
       saveResults();
       appendResultRow(resultToSave, results.length);
       refreshResultsPanel();
 
-      const scored = result.score != null;
-      setStatus(
-        scored
-          ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
-          : `✓ Detected ${result.answers.length} answers. (No answer key — scoring skipped.)`,
-        'success'
-      );
+      // Surface any reference-image warning the Python side raised.
+      if (result.ref_warning) {
+        console.warn('[grade_sheet] reference image warning:', result.ref_warning);
+        setStatus(`⚠ Reference image issue: ${result.ref_warning}`, 'error');
+      } else {
+        const scored = result.score != null;
+        setStatus(
+          scored
+            ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
+            : `✓ Detected ${result.answers.length} answers. (No answer key — scoring skipped.)`,
+          'success'
+        );
+      }
     }
   } catch (err) {
     setStatus(`Grading error: ${err.message}`, 'error');
