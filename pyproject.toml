@@ -90,6 +90,19 @@ dependencies {
 }
 """
 
+[tool.briefcase.app.bubble-mark.iOS]
+requires = [
+    "toga-iOS>=0.4",
+    "Pillow>=10.0",
+    "numpy>=1.26",
+    # opencv-python-headless has no iOS wheel; the contour overlay is silently
+    # skipped and grading falls back to "Image processing is not available on
+    # this platform." until a compatible iOS wheel is published.
+]
+
+[tool.briefcase.app.bubble-mark.iOS.info]
+NSCameraUsageDescription = "Required to photograph and grade bubble sheets"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
