@@ -707,10 +707,13 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
     Returns a JSON string encoding the result dict, or the string ``'null'``
     when no sheet could be detected.
     """
+    from bubble_mark.processing.image_utils import resize_image as _resize_image
+
     data = image_bytes_js.to_py()          # JsProxy[Uint8Array] → bytearray
     pil = PILImage.open(io.BytesIO(data)).convert('RGB')
     rgb = np.array(pil, dtype=np.uint8)
     bgr = rgb[:, :, ::-1].copy()           # RGB → BGR (cv2 convention)
+    del data, pil, rgb  # free decoded originals; bgr is the only copy we need
 
     layout = {
         'num_questions':        int(num_questions),
@@ -723,6 +726,9 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
     id_region     = json.loads(str(id_region_json))      # list or None
 
     # Load reference image for cross-correlation alignment when provided.
+    # Pre-resize to the normalised sheet dimensions (850×1100) so the detector
+    # never holds a full-resolution copy; the phase-correlation alignment only
+    # needs the image at normalised size.
     ref_bgr = None
     ref_warning = None
     if reference_image_bytes_js is not None:
@@ -731,6 +737,8 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
             ref_pil  = PILImage.open(io.BytesIO(ref_data)).convert('RGB')
             ref_rgb  = np.array(ref_pil, dtype=np.uint8)
             ref_bgr  = ref_rgb[:, :, ::-1].copy()
+            del ref_data, ref_pil, ref_rgb  # free intermediates immediately
+            ref_bgr  = _resize_image(ref_bgr, width=850, height=1100)
         except Exception as exc:
             print(f'[grade_sheet] reference image decode failed: {exc}', file=sys.stderr)
             ref_bgr = None
@@ -744,10 +752,12 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
         reference_image=ref_bgr,
         reference_color_channel=int(reference_color_channel),
     )
+    del ref_bgr  # detector holds its own reference; free this alias
     analyzer = BubbleAnalyzer(float(fill_threshold))
     grader = BubbleSheetGrader(answer_key, detector, analyzer)
 
     result = grader.grade_image(bgr)
+    del bgr  # free the sheet image; result holds only the annotated overlay copy
     if result is None:
         return 'null'
 
@@ -840,13 +850,14 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
     """
     import base64
     from bubble_mark.processing.color_channel import extract_print_channel, enhance_contrast
-    from bubble_mark.processing.image_utils import find_page_contour, perspective_transform
+    from bubble_mark.processing.image_utils import find_page_contour, perspective_transform, resize_image
 
     try:
         data = image_bytes_js.to_py()
         pil  = PILImage.open(io.BytesIO(data)).convert('RGB')
         rgb  = np.array(pil, dtype=np.uint8)
         bgr  = rgb[:, :, ::-1].copy()
+        del data, pil, rgb  # free decoded originals; bgr is the only copy we need
 
         edge_lines = json.loads(str(edge_lines_json))
 
@@ -862,11 +873,20 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
             return img
 
         corrected = _apply_correction(bgr, edge_lines)
+        del bgr  # free full-resolution source once correction is done
+
+        # Resize to the standard normalised sheet dimensions so that the
+        # returned base64 PNG is small (~1–3 MB) rather than holding the
+        # full-resolution source image (~30–50 MB as base64 for a 12 MP photo).
+        # All downstream uses (enhance_reference_channel, detect_reference_grid,
+        # and the on-canvas display) work correctly at this resolution.
+        corrected = resize_image(corrected, width=850, height=1100)
 
         variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
         best_channel = int(np.argmax(variances))
         channel      = extract_print_channel(corrected, best_channel)
         enhanced     = enhance_contrast(channel)
+        del channel  # free after enhancement
 
         def _to_b64(arr, mode='BGR'):
             if mode == 'BGR':
