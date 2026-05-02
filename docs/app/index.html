@@ -1071,7 +1071,7 @@ btnCamera.addEventListener('click', async () => {
     cameraVideo.srcObject = cameraStream;
     cameraSection.style.display = 'block';
     startLiveOverlay();
-    setStatus('Point the camera at a bubble sheet and tap "Capture Frame".', 'info');
+    setStatus('Point the camera at a bubble sheet and tap "Capture Frame". Capture multiple sheets, then stop the camera to grade.', 'info');
   } catch (err) {
     const msg = err.name === 'NotAllowedError'
       ? 'Camera permission denied. Please allow camera access and try again.'
@@ -1094,10 +1094,44 @@ btnCapture.addEventListener('click', () => {
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
   cap.toBlob((blob) => {
     if (!blob) { setStatus('Failed to capture frame. Please try again.', 'error'); return; }
-    stopCamera();
-    // Wrap as a File-like object compatible with addImageFiles.
-    const file = new File([blob], 'camera.jpg', { type: 'image/jpeg' });
-    addImageFiles([file]);
+    // Keep the camera running so the user can capture additional sheets.
+    const idx  = pendingFiles.length + 1;
+    const file = new File([blob], `camera-${idx}.jpg`, { type: 'image/jpeg' });
+    file.arrayBuffer().then((buf) => {
+      const entry = { name: file.name, bytes: new Uint8Array(buf) };
+      pendingFiles.push(entry);
+
+      // Persist the first captured file to IDB for reload recovery.
+      if (pendingFiles.length === 1) {
+        idbPut(IDB_KEY_PENDING, entry.bytes).catch(() => {});
+      }
+
+      // Update the preview canvas with the latest captured frame.
+      const imgUrl = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        previewCanvas.width  = img.naturalWidth;
+        previewCanvas.height = img.naturalHeight;
+        previewCanvas.getContext('2d').drawImage(img, 0, 0);
+        previewCanvas.style.display = 'block';
+        previewHint.style.display   = 'none';
+        previewArea.classList.add('has-image');
+        URL.revokeObjectURL(imgUrl);
+      };
+      img.src = imgUrl;
+
+      gradedTabsSection.hidden = true;
+      previewArea.style.display = '';
+      updatePendingInfo();
+      btnGrade.disabled = !gradeSheetFn;
+      const count = pendingFiles.length;
+      setStatus(
+        count === 1
+          ? '1 frame captured — capture more or stop the camera to grade.'
+          : `${count} frames captured — capture more or stop the camera to grade.`,
+        'info'
+      );
+    });
   }, 'image/jpeg', 0.92);
 });
 
