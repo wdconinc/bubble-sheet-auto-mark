@@ -243,7 +243,9 @@ def estimate_distortion_from_reference(
 
     ch_sheet = extract_print_channel(sheet_image, channel).astype(np.float32)
     ch_ref = extract_print_channel(reference_image, channel).astype(np.float32)
-    del reference_image  # free the (possibly resized) copy now that channel is extracted
+    del (
+        reference_image
+    )  # free the (possibly resized) copy now that channel is extracted
 
     # Normalised cross-correlation via FFT to find (dx, dy) translation
     dx, dy = _fft_translation(ch_sheet, ch_ref)
