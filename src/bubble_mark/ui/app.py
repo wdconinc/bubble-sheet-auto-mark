@@ -1,4 +1,5 @@
 """BubbleMarkApp – main Toga application class."""
+
 from __future__ import annotations
 
 import logging
@@ -25,6 +26,7 @@ class BubbleMarkApp(toga.App):
 
         # ── Logging handler (captures records from all modules) ───────────
         from bubble_mark.ui.log_handler import StatusBarHandler
+
         self._log_handler = StatusBarHandler()
         self._log_handler.setFormatter(
             logging.Formatter("%(levelname)s %(name)s: %(message)s")
@@ -35,12 +37,15 @@ class BubbleMarkApp(toga.App):
         # level only when it still has no handlers other than our own (i.e. the
         # app has not set up its own logging configuration), or when the level
         # would suppress INFO messages entirely.
-        if not any(h for h in root_logger.handlers if h is not self._log_handler) \
-                or root_logger.level > logging.INFO:
+        if (
+            not any(h for h in root_logger.handlers if h is not self._log_handler)
+            or root_logger.level > logging.INFO
+        ):
             root_logger.setLevel(logging.INFO)
 
         # ── Status bar (collapsible log drawer) ───────────────────────────
         from bubble_mark.ui.status_bar import LogStatusBar
+
         self._status_bar = LogStatusBar(self, self._log_handler)
 
         # ── Persistent wrapper layout ─────────────────────────────────────
@@ -61,12 +66,14 @@ class BubbleMarkApp(toga.App):
         # Schedule update check 2 s after startup (daemon thread so it
         # doesn't keep the process alive on shutdown)
         import threading
+
         t = threading.Timer(2.0, self._trigger_update_check)
         t.daemon = True
         t.start()
 
     def _trigger_update_check(self) -> None:
         from bubble_mark.updater import check_and_prompt_update
+
         check_and_prompt_update(self)
 
     # ------------------------------------------------------------------
@@ -75,18 +82,22 @@ class BubbleMarkApp(toga.App):
 
     def _build_home(self) -> toga.Box:
         from bubble_mark.ui.screens.home_screen import build_home_screen
+
         return build_home_screen(self)
 
     def _build_camera(self) -> toga.Box:
         from bubble_mark.ui.screens.camera_screen import build_camera_screen
+
         return build_camera_screen(self)
 
     def _build_settings(self) -> toga.Box:
         from bubble_mark.ui.screens.settings_screen import build_settings_screen
+
         return build_settings_screen(self)
 
     def _build_results(self) -> toga.Box:
         from bubble_mark.ui.screens.results_screen import build_results_screen
+
         return build_results_screen(self)
 
     # ------------------------------------------------------------------

@@ -1,4 +1,5 @@
 """Tests for bubble_mark.processing.image_utils."""
+
 from __future__ import annotations
 
 import cv2
@@ -28,6 +29,7 @@ def no_cv2(monkeypatch):
 # load_image
 # ---------------------------------------------------------------------------
 
+
 class TestLoadImage:
     def test_missing_file_raises(self, tmp_path):
         with pytest.raises(FileNotFoundError):
@@ -51,6 +53,7 @@ class TestLoadImage:
 # to_grayscale
 # ---------------------------------------------------------------------------
 
+
 class TestToGrayscale:
     def test_bgr_to_gray(self):
         img = np.random.randint(0, 255, (100, 100, 3), dtype=np.uint8)
@@ -72,6 +75,7 @@ class TestToGrayscale:
 # ---------------------------------------------------------------------------
 # apply_threshold
 # ---------------------------------------------------------------------------
+
 
 class TestApplyThreshold:
     def test_otsu_returns_binary(self):
@@ -98,6 +102,7 @@ class TestApplyThreshold:
 # order_points
 # ---------------------------------------------------------------------------
 
+
 class TestOrderPoints:
     def test_order_known_points(self):
         pts = np.array([[10, 200], [200, 10], [200, 200], [10, 10]], dtype=np.float32)
@@ -117,10 +122,13 @@ class TestOrderPoints:
 # perspective_transform
 # ---------------------------------------------------------------------------
 
+
 class TestPerspectiveTransform:
     def test_output_is_ndarray(self):
         img = np.ones((200, 200, 3), dtype=np.uint8) * 200
-        contour = np.array([[10, 10], [190, 10], [190, 190], [10, 190]], dtype=np.float32)
+        contour = np.array(
+            [[10, 10], [190, 10], [190, 190], [10, 190]], dtype=np.float32
+        )
         warped = perspective_transform(img, contour)
         assert isinstance(warped, np.ndarray)
         assert warped.ndim == 3
@@ -128,7 +136,9 @@ class TestPerspectiveTransform:
     def test_output_shape_approximation(self):
         # Contour describing a near-square region → output should be roughly square
         img = np.ones((300, 300, 3), dtype=np.uint8) * 200
-        contour = np.array([[20, 20], [280, 20], [280, 280], [20, 280]], dtype=np.float32)
+        contour = np.array(
+            [[20, 20], [280, 20], [280, 280], [20, 280]], dtype=np.float32
+        )
         warped = perspective_transform(img, contour)
         h, w = warped.shape[:2]
         assert abs(w - h) < 20  # roughly square
@@ -137,6 +147,7 @@ class TestPerspectiveTransform:
 # ---------------------------------------------------------------------------
 # find_page_contour
 # ---------------------------------------------------------------------------
+
 
 class TestFindPageContour:
     def test_blank_image_returns_none_or_array(self):
@@ -158,6 +169,7 @@ class TestFindPageContour:
 # ---------------------------------------------------------------------------
 # resize_image
 # ---------------------------------------------------------------------------
+
 
 class TestResizeImage:
     def test_resize_by_width(self):
@@ -187,6 +199,7 @@ class TestResizeImage:
 # Pure NumPy/Pillow fallback paths (_HAVE_CV2 = False)
 # ---------------------------------------------------------------------------
 
+
 class TestLoadImageNoCv2:
     def test_missing_file_raises(self, tmp_path, no_cv2):
         with pytest.raises(FileNotFoundError):
@@ -200,6 +213,7 @@ class TestLoadImageNoCv2:
 
     def test_valid_image_loaded(self, tmp_path, no_cv2):
         from PIL import Image as PILImage
+
         img = PILImage.fromarray(np.zeros((50, 50, 3), dtype=np.uint8), mode="RGB")
         path = str(tmp_path / "img.png")
         img.save(path)
@@ -252,14 +266,18 @@ class TestFindPageContourNoCv2:
 class TestPerspectiveTransformNoCv2:
     def test_output_is_ndarray(self, no_cv2):
         img = np.ones((200, 200, 3), dtype=np.uint8) * 200
-        contour = np.array([[10, 10], [190, 10], [190, 190], [10, 190]], dtype=np.float32)
+        contour = np.array(
+            [[10, 10], [190, 10], [190, 190], [10, 190]], dtype=np.float32
+        )
         warped = perspective_transform(img, contour)
         assert isinstance(warped, np.ndarray)
         assert warped.ndim == 3
 
     def test_output_shape_approximation(self, no_cv2):
         img = np.ones((300, 300, 3), dtype=np.uint8) * 200
-        contour = np.array([[20, 20], [280, 20], [280, 280], [20, 280]], dtype=np.float32)
+        contour = np.array(
+            [[20, 20], [280, 20], [280, 280], [20, 280]], dtype=np.float32
+        )
         warped = perspective_transform(img, contour)
         h, w = warped.shape[:2]
         assert abs(w - h) < 20  # roughly square

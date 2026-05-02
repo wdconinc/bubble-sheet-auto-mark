@@ -17,6 +17,7 @@ Usage::
     ...
     stop_camera()
 """
+
 from __future__ import annotations
 
 import sys
@@ -39,13 +40,14 @@ def _is_android() -> bool:
 # Android implementation
 # ---------------------------------------------------------------------------
 
+
 def _start_android(callback: FrameCallback) -> None:
     global _provider
     # Idempotency guard: silently skip if the camera is already running.
     if _provider is not None:
         return
 
-    from jnius import autoclass, PythonJavaClass, java_method  # type: ignore[import]
+    from jnius import PythonJavaClass, autoclass, java_method  # type: ignore[import]
 
     ProcessCameraProvider = autoclass("androidx.camera.lifecycle.ProcessCameraProvider")
     ImageAnalysis = autoclass("androidx.camera.core.ImageAnalysis")
@@ -96,9 +98,7 @@ def _start_android(callback: FrameCallback) -> None:
         ImageAnalysis.Builder()
         # RGBA_8888 = 2 (single plane, trivial numpy reshape)
         .setOutputImageFormat(2)
-        .setBackpressureStrategy(
-            ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
-        )
+        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
         .build()
     )
     # Use a background executor so numpy/OpenCV work never runs on the UI thread.
@@ -122,6 +122,7 @@ def _start_android(callback: FrameCallback) -> None:
                 )
             except Exception as exc:
                 import logging
+
                 logging.getLogger(__name__).error("CameraX bind failed: %s", exc)
 
     # bindToLifecycle must be called on the main thread.
@@ -141,6 +142,7 @@ def _stop_android() -> None:
 # ---------------------------------------------------------------------------
 # Desktop stub
 # ---------------------------------------------------------------------------
+
 
 def _start_stub(callback: FrameCallback) -> None:  # noqa: D401
     """No-op on non-Android platforms."""

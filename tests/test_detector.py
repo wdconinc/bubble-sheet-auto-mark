@@ -1,11 +1,11 @@
 """Tests for bubble_mark.processing.detector."""
+
 from __future__ import annotations
 
 import numpy as np
-import pytest
 
 from bubble_mark.processing.detector import BubbleSheetDetector
-from tests.conftest import create_blank_sheet, create_synthetic_bubble_sheet
+from tests.conftest import create_blank_sheet
 
 
 class TestBubbleSheetDetectorInit:
@@ -70,7 +70,7 @@ class TestLocateAnswerBubbles:
         h, w = normalised.shape[:2]
         grid = d.locate_answer_bubbles(normalised)
         for row in grid:
-            for (x, y, bw, bh) in row:
+            for x, y, bw, bh in row:
                 assert x >= 0
                 assert y >= 0
                 assert x + bw <= w + 5  # allow tiny rounding
@@ -108,7 +108,8 @@ class TestLocateIdBubbles:
         id_section_start = int(normalised.shape[0] * 0.74)
         columns = d.locate_id_bubbles(normalised)
         for col in columns:
-            for (x, y, bw, bh) in col:
+            for x, y, bw, bh in col:
                 assert y >= id_section_start, (
-                    f"ID bubble y={y} is above the ID section start at {id_section_start}"
+                    f"ID bubble y={y} is above the ID section "
+                    f"start at {id_section_start}"
                 )

@@ -1,10 +1,9 @@
 """Tests for bubble_mark.models.settings."""
+
 from __future__ import annotations
 
 import json
 import os
-
-import pytest
 
 from bubble_mark.models.settings import AppSettings
 

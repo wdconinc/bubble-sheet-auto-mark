@@ -1,4 +1,5 @@
 """Shared pytest fixtures and synthetic image helpers."""
+
 from __future__ import annotations
 
 import os
@@ -14,6 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 # ---------------------------------------------------------------------------
 # Synthetic image helpers
 # ---------------------------------------------------------------------------
+
 
 def create_blank_sheet(width: int = 850, height: int = 1100) -> np.ndarray:
     """Return a white (255) BGR image of the given dimensions."""
@@ -71,7 +73,7 @@ def create_synthetic_bubble_sheet(
             y = margin_y + row * cell_h + pad_y
             cx, cy = x + bub_w // 2, y + bub_h // 2
             rx, ry = bub_w // 2, bub_h // 2
-            chosen = (str(col + 1) == answer_ch)
+            chosen = str(col + 1) == answer_ch
             color = (30, 30, 30) if chosen else (200, 200, 200)
             thickness = -1 if chosen else 2
             cv2.ellipse(sheet, (cx, cy), (rx, ry), 0, 0, 360, color, thickness)
@@ -99,7 +101,7 @@ def create_synthetic_bubble_sheet(
             y = id_top + id_margin_y + row * id_cell_h + id_pad_y
             cx, cy = x + id_bub_w // 2, y + id_bub_h // 2
             rx, ry = id_bub_w // 2, id_bub_h // 2
-            chosen = (str(row) == digit_ch)
+            chosen = str(row) == digit_ch
             color = (30, 30, 30) if chosen else (200, 200, 200)
             thickness = -1 if chosen else 2
             cv2.ellipse(sheet, (cx, cy), (rx, ry), 0, 0, 360, color, thickness)
@@ -110,6 +112,7 @@ def create_synthetic_bubble_sheet(
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def blank_sheet():
@@ -139,4 +142,5 @@ def synthetic_sheet():
 @pytest.fixture
 def sample_answer_key():
     from bubble_mark.models.answer_key import AnswerKey
+
     return AnswerKey("12345", name="test_key")

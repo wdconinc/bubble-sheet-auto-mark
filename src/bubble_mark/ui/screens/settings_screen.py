@@ -1,4 +1,5 @@
 """Settings screen: configure layout, answer key, thresholds."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -63,7 +64,9 @@ def build_settings_screen(app: BubbleMarkApp) -> toga.Box:
 
     btn_row = toga.Box(style=Pack(direction=ROW, padding_top=6))
     btn_row.add(
-        toga.Button("Save Settings", on_press=save_settings, style=Pack(flex=1, padding_right=5)),
+        toga.Button(
+            "Save Settings", on_press=save_settings, style=Pack(flex=1, padding_right=5)
+        ),
         toga.Button("Back", on_press=lambda w: app.go_home(), style=Pack(flex=1)),
     )
 

@@ -1,4 +1,5 @@
 """Bubble sheet detector: find and normalise the sheet, locate bubbles."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -92,8 +93,7 @@ class BubbleSheetDetector:
         raw_grid = self._build_bubble_grid(section, num_choices, num_d, offset_y=id_top)
         # raw_grid[row][col] → we want [col][row]
         columns: list[list[tuple[int, int, int, int]]] = [
-            [raw_grid[row][col] for row in range(num_choices)]
-            for col in range(num_d)
+            [raw_grid[row][col] for row in range(num_choices)] for col in range(num_d)
         ]
         return columns
 
@@ -142,5 +142,3 @@ class BubbleSheetDetector:
                 row_bubbles.append((x, y, bub_w, bub_h))
             grid.append(row_bubbles)
         return grid
-
-

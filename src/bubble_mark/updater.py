@@ -1,4 +1,5 @@
 """In-app update checker for Bubble Sheet Auto-Mark."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -70,7 +71,7 @@ def _parse_version(v: str) -> tuple[int, int, int]:
 
 
 def is_update_available() -> tuple[bool, str | None]:
-    """Return ``(update_available, apk_url)`` by comparing against the latest release."""
+    """Return ``(update_available, apk_url)`` comparing against the latest release."""
     latest_version, apk_url = get_latest_release()
     return _parse_version(latest_version) > _parse_version(CURRENT_VERSION), apk_url
 
@@ -81,7 +82,9 @@ def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
     On non-Android platforms this function returns immediately without
     showing any UI so desktop development is unaffected.
     """
-    on_android = sys.platform == "linux" and importlib.util.find_spec("android") is not None
+    on_android = (
+        sys.platform == "linux" and importlib.util.find_spec("android") is not None
+    )
     if not on_android:
         return
 
@@ -101,6 +104,7 @@ def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
                 _open_url(apk_url)
 
         import toga
+
         app_instance.loop.call_soon_threadsafe(
             lambda: app_instance.loop.create_task(_show_dialog())
         )
