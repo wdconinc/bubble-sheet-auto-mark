@@ -23,12 +23,16 @@ nav_order: 2
 
 ### Python dependencies
 
-| Package | Purpose |
-|---|---|
-| `toga>=0.4` | Cross-platform UI framework (BeeWare) |
-| `opencv-python-headless>=4.8` | Image processing pipeline |
-| `numpy>=1.26` | Array operations |
-| `Pillow>=10.0` | Image I/O helpers |
+| Package | Platform | Purpose |
+|---|---|---|
+| `toga>=0.4` | Desktop | Cross-platform UI framework (BeeWare) |
+| `toga-android>=0.4` | Android | Toga backend for Android |
+| `opencv-python-headless>=4.8` | Desktop only | Image processing pipeline (optional — NumPy/Pillow fallback used when absent) |
+| `numpy>=1.26` | All | Array operations |
+| `Pillow>=10.0` | All | Image I/O helpers |
+
+{: .note }
+OpenCV is **not** available in the Android Briefcase environment (no compatible wheel for Chaquopy). The app falls back to a NumPy/Pillow implementation automatically, so grading still works but perspective-correction performance may differ.
 
 ---
 
@@ -73,6 +77,9 @@ All packaging configuration is in the `[tool.briefcase]` section of `pyproject.t
 
 {: .note }
 Building for Android requires the Android SDK. Briefcase will prompt you to install it automatically on first build.
+
+{: .warning }
+OpenCV (`opencv-python-headless`) is **not** available in the Android build environment. The app automatically falls back to its NumPy/Pillow image-processing path, so grading still works, but some advanced detection features (e.g. contour overlay) are unavailable on Android.
 
 ---
 
