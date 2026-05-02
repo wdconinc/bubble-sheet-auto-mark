@@ -1560,7 +1560,8 @@ function activateTab(idx) {
 
   // Show the annotated overlay (or raw image if detection failed).
   const sheet = gradedSheets[idx];
-  if (sheet.annotatedB64) {
+  if (sheet.result !== null && sheet.annotatedB64) {
+    // Detection succeeded and we have an annotated image.
     const img = new Image();
     img.onload = () => {
       sheetCanvas.width  = img.naturalWidth;
@@ -1570,8 +1571,23 @@ function activateTab(idx) {
       sheetHint.style.display   = 'none';
     };
     img.src = 'data:image/png;base64,' + sheet.annotatedB64;
+  } else if (sheet.result !== null) {
+    // Detection succeeded but no annotated image was returned; show original.
+    const blob = new Blob([sheet.bytes]);
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
+    img.onload = () => {
+      sheetCanvas.width  = img.naturalWidth;
+      sheetCanvas.height = img.naturalHeight;
+      sheetCanvas.getContext('2d').drawImage(img, 0, 0);
+      sheetCanvas.style.display = 'block';
+      sheetHint.style.display   = 'none';
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
   } else {
-    // Detection failed: show the original image greyed out, with a hint.
+    // Detection failed: show the original image greyed out with an error hint.
     const blob = new Blob([sheet.bytes]);
     const url  = URL.createObjectURL(blob);
     const img  = new Image();
@@ -1583,11 +1599,12 @@ function activateTab(idx) {
       ctx.fillStyle = 'rgba(255,255,255,0.55)';
       ctx.fillRect(0, 0, sheetCanvas.width, sheetCanvas.height);
       sheetCanvas.style.display = 'block';
-      sheetHint.style.display   = 'none';
       URL.revokeObjectURL(url);
     };
     img.onerror = () => URL.revokeObjectURL(url);
     img.src = url;
+    sheetHint.textContent    = '⚠ No bubble sheet detected in this image.';
+    sheetHint.style.display  = 'block';
   }
 }
 
@@ -1609,6 +1626,21 @@ btnRegrade.addEventListener('click', async () => {
     if (result === null) {
       sheet.result     = null;
       sheet.annotatedB64 = null;
+
+      // Remove the stale results entry (if any) and fix up resultIdx pointers.
+      if (sheet.resultIdx !== null && sheet.resultIdx >= 0 && sheet.resultIdx < results.length) {
+        const removedIdx = sheet.resultIdx;
+        results.splice(removedIdx, 1);
+        sheet.resultIdx = null;
+        // Shift resultIdx on all other graded sheets that came after the removed entry.
+        gradedSheets.forEach((s) => {
+          if (s.resultIdx !== null && s.resultIdx > removedIdx) s.resultIdx -= 1;
+        });
+        saveResults();
+        renderResultsTable();
+        refreshResultsPanel();
+      }
+
       setStatus(`No bubble sheet detected when regrading "${sheet.name}".`, 'error');
     } else {
       const annotatedB64 = result.annotated_image_b64 || null;
@@ -1618,7 +1650,7 @@ btnRegrade.addEventListener('click', async () => {
       sheet.annotatedB64 = annotatedB64;
 
       // Update the existing result in-place if there is one, otherwise append.
-      if (sheet.resultIdx != null && sheet.resultIdx >= 0 && sheet.resultIdx < results.length) {
+      if (sheet.resultIdx !== null && sheet.resultIdx >= 0 && sheet.resultIdx < results.length) {
         results[sheet.resultIdx] = resultToSave;
       } else {
         results.push(resultToSave);
