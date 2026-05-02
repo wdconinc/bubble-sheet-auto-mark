@@ -232,10 +232,27 @@ def _mock_toga_context():
     return patch.dict(sys.modules, {"toga": toga_mock})
 
 
+def _sync_thread_patch():
+    """Return a patch that makes threading.Thread execute its target synchronously.
+
+    This eliminates the race condition in tests that call check_for_updates()
+    and then immediately assert on mock state: without this patch the worker
+    thread may not have finished (or even started) before the assertion runs.
+    """
+    import threading as _threading
+
+    class _SyncThread(_threading.Thread):
+        def start(self):
+            if self._target:
+                self._target(*self._args, **self._kwargs)
+
+    return patch("threading.Thread", _SyncThread)
+
+
 class TestCheckForUpdates:
     def test_shows_up_to_date_when_no_newer_version(self):
         app = _make_app_instance()
-        with _mock_toga_context():
+        with _mock_toga_context(), _sync_thread_patch():
             with patch("bubble_mark.updater.get_latest_release", return_value=("0.1.0", None)):
                 with patch("bubble_mark.updater.CURRENT_VERSION", "0.1.0"):
                     check_for_updates(app)
@@ -245,7 +262,7 @@ class TestCheckForUpdates:
 
     def test_shows_update_available_when_newer_version(self):
         app = _make_app_instance()
-        with _mock_toga_context():
+        with _mock_toga_context(), _sync_thread_patch():
             with patch("bubble_mark.updater.get_latest_release", return_value=("9.9.9", "https://example.com/app.apk")):
                 check_for_updates(app)
 
@@ -253,7 +270,7 @@ class TestCheckForUpdates:
 
     def test_shows_error_when_network_fails(self):
         app = _make_app_instance()
-        with _mock_toga_context():
+        with _mock_toga_context(), _sync_thread_patch():
             with patch("bubble_mark.updater.get_latest_release", return_value=(None, None)):
                 check_for_updates(app)
 
@@ -290,7 +307,7 @@ class TestCheckForUpdates:
         captured_coro = []
         app.loop.create_task.side_effect = lambda coro: captured_coro.append(coro)
 
-        with _mock_toga_context():
+        with _mock_toga_context(), _sync_thread_patch():
             with patch("bubble_mark.updater.get_latest_release", return_value=("9.9.9", "https://example.com/app.apk")):
                 with patch("bubble_mark.updater.CURRENT_VERSION", "0.1.0"):
                     with patch("bubble_mark.updater.importlib.util.find_spec", return_value=None):
