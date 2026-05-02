@@ -22,7 +22,7 @@ A **privacy-first**, cross-platform application for grading bubble-sheet tests u
 | **Student-ID recognition** | Reads the bubble-coded ID grid from each sheet |
 | **Answer-key comparison** | Configurable number of questions and choices (A–E) |
 | **CSV export** | One row per sheet: `student_id, answers, score, num_correct, num_questions` |
-| **Cross-platform** | Linux, macOS, Windows, and Android (via Kivy + Buildozer) |
+| **Cross-platform** | Linux, macOS, Windows, and Android (via Toga + Briefcase) |
 | **MIT licensed** | Free to use, modify, and distribute |
 
 ---
@@ -43,8 +43,8 @@ Key design principles:
 ## Quick Start
 
 ```bash
-pip install -r requirements.txt
-python main.py
+pip install -e ".[toga,dev]"
+briefcase dev
 ```
 
 See the [Installation](installation) page for full prerequisites and the [Usage](usage) page to learn how to grade your first sheet.
