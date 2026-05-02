@@ -247,13 +247,13 @@
     #preview-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
 
     /* ── Camera ── */
-    #camera-section { margin-top: 12px; display: none; }
-    #camera-video {
+    #camera-section, #ref-camera-section { margin-top: 12px; display: none; }
+    #camera-video, #ref-camera-video {
       width: 100%; max-height: 380px;
       background: #000; border-radius: var(--radius); display: block;
     }
     /* Canvas drawn on top of #camera-video; pointer-events:none so clicks pass through */
-    #camera-overlay {
+    #camera-overlay, #ref-camera-overlay {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
       pointer-events: none; border-radius: var(--radius);
@@ -456,8 +456,22 @@
         <div class="btn-row">
           <button class="btn-ghost" id="btn-ref-upload" type="button">📄 Upload Blank Sheet</button>
           <input type="file" id="ref-file-input" accept="image/*" hidden>
+          <button class="btn-ghost" id="btn-ref-camera" type="button">📷 Use Camera</button>
           <button class="btn-ghost" id="btn-ref-clear" type="button" style="display:none">🗑 Clear Regions</button>
         </div>
+
+        <!-- Reference-sheet camera viewfinder -->
+        <div id="ref-camera-section">
+          <div style="position: relative;">
+            <video id="ref-camera-video" autoplay playsinline muted></video>
+            <canvas id="ref-camera-overlay"></canvas>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn-primary" id="btn-ref-capture">📸 Capture Frame</button>
+            <button class="btn-ghost" id="btn-ref-stop-camera">⏹ Stop Camera</button>
+          </div>
+        </div>
+
         <div id="ref-canvas-section" style="display:none">
 
           <!-- ── Step 1: Define page edges ── -->
@@ -999,6 +1013,7 @@ let activeSheetIdx = -1;     // index of the currently shown graded sheet tab
 let cameraStream   = null;
 let captureCounter = 0;   // monotonically increments with each capture; used for unique filenames
 let captureSession = 0;   // incremented when camera stops; invalidates in-flight capture callbacks
+let refCameraStream = null;  // MediaStream for the reference-sheet camera
 
 // Fixed layout constant (matches id_choices_per_digit in the Python pipeline)
 const ID_CHOICES_PER_DIGIT = 10;
@@ -1062,7 +1077,13 @@ const btnClear       = $('btn-clear');
 // Reference-sheet elements
 const btnRefUpload    = $('btn-ref-upload');
 const refFileInput    = $('ref-file-input');
+const btnRefCamera    = $('btn-ref-camera');
 const btnRefClear     = $('btn-ref-clear');
+const refCameraSection = $('ref-camera-section');
+const refCameraVideo  = $('ref-camera-video');
+const refCameraOverlay = $('ref-camera-overlay');
+const btnRefCapture   = $('btn-ref-capture');
+const btnRefStopCam   = $('btn-ref-stop-camera');
 const refCanvasSection = $('ref-canvas-section');
 const refCanvas       = $('ref-canvas');
 const refCtx          = refCanvas.getContext('2d');
@@ -2114,7 +2135,83 @@ refFileInput.addEventListener('change', (e) => {
   img.src = url;
 });
 
+// ── Reference-sheet camera ────────────────────────────────────────────────────
+
+btnRefCamera.addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus(
+      'Camera API not available. Use file upload, or ensure the page is served over HTTPS.',
+      'error'
+    );
+    return;
+  }
+  try {
+    refCameraStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+    });
+    refCameraVideo.srcObject = refCameraStream;
+    refCameraSection.style.display = 'block';
+    setStatus('Point the camera at the blank bubble sheet and tap "Capture Frame".', 'info');
+  } catch (err) {
+    const msg = err.name === 'NotAllowedError'
+      ? 'Camera permission denied. Please allow camera access and try again.'
+      : `Camera error: ${err.message}`;
+    setStatus(msg, 'error');
+  }
+});
+
+btnRefCapture.addEventListener('click', () => {
+  if (!refCameraStream) return;
+  const w = refCameraVideo.videoWidth;
+  const h = refCameraVideo.videoHeight;
+  if (!w || !h) {
+    setStatus('Camera frame not ready. Wait a moment and try again.', 'error');
+    return;
+  }
+  const cap = document.createElement('canvas');
+  cap.width  = w;
+  cap.height = h;
+  cap.getContext('2d').drawImage(refCameraVideo, 0, 0);
+  cap.toBlob((blob) => {
+    if (!blob) { setStatus('Failed to capture frame. Please try again.', 'error'); return; }
+    stopRefCamera();
+    blob.arrayBuffer().then((buf) => {
+      const bytes = new Uint8Array(buf);
+      idbPut(IDB_KEY_REF, bytes).catch(() => {});
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        refCorrectedImageEl  = null;
+        refEnhancedImageEl   = null;
+        refCorrectedImageB64 = null;
+        refGridLinesData     = null;
+        refRawImageEl = img;
+        refCanvasSection.style.display = 'block';
+        btnRefClear.style.display = 'inline-flex';
+        setRefStep(0);
+        URL.revokeObjectURL(url);
+      };
+      img.src = url;
+    }).catch((err) => {
+      console.error('Ref capture arrayBuffer error:', err);
+      setStatus('Failed to read captured frame. Please try again.', 'error');
+    });
+  }, 'image/jpeg', 0.92);
+});
+
+btnRefStopCam.addEventListener('click', stopRefCamera);
+
+function stopRefCamera() {
+  if (refCameraStream) {
+    refCameraStream.getTracks().forEach((t) => t.stop());
+    refCameraStream = null;
+  }
+  refCameraVideo.srcObject = null;
+  refCameraSection.style.display = 'none';
+}
+
 btnRefClear.addEventListener('click', () => {
+  stopRefCamera();
   refImageEl           = null;
   refRawImageEl        = null;
   refCorrectedImageEl  = null;
