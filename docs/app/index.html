@@ -492,6 +492,10 @@
         <div class="btn-row" style="margin-top:8px">
           <button class="btn-primary" id="btn-capture">📸 Capture Frame</button>
           <button class="btn-ghost" id="btn-stop-camera">⏹ Stop Camera</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.875rem;color:var(--text)" title="Automatically capture when a sheet is detected and the camera is held still">
+            <input type="checkbox" id="chk-auto-capture" style="width:15px;height:15px;cursor:pointer;accent-color:var(--success)">
+            Auto-capture
+          </label>
         </div>
       </div>
 
@@ -795,6 +799,7 @@ const btnCamera      = $('btn-camera');
 const btnGrade       = $('btn-grade');
 const btnCapture     = $('btn-capture');
 const btnStopCam     = $('btn-stop-camera');
+const chkAutoCapture = $('chk-auto-capture');
 const cameraSection  = $('camera-section');
 const cameraVideo    = $('camera-video');
 const cameraOverlay  = $('camera-overlay');
@@ -1103,6 +1108,15 @@ btnCapture.addEventListener('click', () => {
 
 btnStopCam.addEventListener('click', stopCamera);
 
+chkAutoCapture.addEventListener('change', () => {
+  autoCaptureEnabled     = chkAutoCapture.checked;
+  autoCaptureStableCount = 0;
+  autoCapturePrevData    = null;
+  if (autoCaptureEnabled) {
+    setStatus('Auto-capture on — hold the camera still over a sheet.', 'info');
+  }
+});
+
 function stopCamera() {
   stopLiveOverlay();
   if (cameraStream) {
@@ -1129,7 +1143,20 @@ let overlaySession  = 0;      // incremented on start/stop to invalidate stale c
 let liveCanvasW     = 0;      // cached overlay canvas dimensions
 let liveCanvasH     = 0;
 let liveCtx         = null;   // cached 2D rendering context for #camera-overlay
+
+// Auto-capture state
+let autoCaptureEnabled      = false;
+let autoCapturePrevData     = null;   // Uint8ClampedArray thumbnail of the previous analysis frame
+let autoCaptureStableCount  = 0;      // consecutive stable+contour detections so far
+let autoCaptureCooldownUntil = 0;     // performance.now() value until which auto-capture is suppressed
 const OVERLAY_INTERVAL_MS = 900;  // minimum ms between contour-detection calls
+
+// Auto-capture: trigger when a sheet is detected and the frame is stable.
+const AUTO_CAPTURE_MAD_THRESHOLD   = 10;   // mean abs pixel diff per channel (0–255) for "stable"
+const AUTO_CAPTURE_STABLE_REQUIRED = 2;    // consecutive stable+contour detections needed to fire
+const AUTO_CAPTURE_COOLDOWN_MS     = 2500; // ms to wait between consecutive auto-captures
+const AUTO_CAPTURE_THUMB_W         = 160;  // thumbnail width  used for motion comparison
+const AUTO_CAPTURE_THUMB_H         = 90;   // thumbnail height used for motion comparison
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 // Settings, regions, and results are stored in localStorage.
@@ -1317,8 +1344,10 @@ async function restorePendingImage() {
 function startLiveOverlay() {
   if (liveLoopId !== null) return;
   overlaySession++;
-  liveLoopBusy = false;
-  liveContour  = null;
+  liveLoopBusy           = false;
+  liveContour            = null;
+  autoCaptureStableCount = 0;
+  autoCapturePrevData    = null;
   liveCanvasW  = 0;   // force dimension sync on first tick
   liveCanvasH  = 0;
   liveCtx      = null;
@@ -1342,8 +1371,32 @@ function stopLiveOverlay() {
   liveOverlayBadge.style.display = 'none';
 }
 
+/**
+ * Downsample srcCanvas to a small thumbnail, compare it against the previous
+ * thumbnail, and return the mean absolute pixel difference per channel (0–255).
+ * Returns null on the first call (no previous frame to compare).
+ * Side-effect: updates autoCapturePrevData for the next call.
+ */
+function _computeMotionMad(srcCanvas) {
+  const thumb = document.createElement('canvas');
+  thumb.width  = AUTO_CAPTURE_THUMB_W;
+  thumb.height = AUTO_CAPTURE_THUMB_H;
+  const tctx = thumb.getContext('2d');
+  tctx.drawImage(srcCanvas, 0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H);
+  const data = tctx.getImageData(0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H).data;
+  const prev = autoCapturePrevData;
+  autoCapturePrevData = data;
+  if (prev === null) return null;
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    sum += Math.abs(data[i]   - prev[i])
+         + Math.abs(data[i+1] - prev[i+1])
+         + Math.abs(data[i+2] - prev[i+2]);
+  }
+  return sum / (data.length / 4) / 3;
+}
+
 function liveOverlayTick(now) {
-  if (!cameraStream) { stopLiveOverlay(); return; }
   liveLoopId = requestAnimationFrame(liveOverlayTick);
 
   const w = cameraVideo.videoWidth;
@@ -1362,7 +1415,9 @@ function liveOverlayTick(now) {
 
   // Redraw each frame: clear then paint the cached contour (if any).
   liveCtx.clearRect(0, 0, w, h);
-  if (liveContour) drawContourOverlay(liveCtx, liveContour);
+  // Outline turns gold when auto-capture is armed and a sheet is being held steady.
+  const overlayColor = (autoCaptureEnabled && autoCaptureStableCount > 0) ? '#ffd700' : '#00ff00';
+  if (liveContour) drawContourOverlay(liveCtx, liveContour, overlayColor);
 
   // Throttle the expensive Python call.
   if (liveLoopBusy || now - lastOverlayMs < OVERLAY_INTERVAL_MS) return;
@@ -1373,6 +1428,9 @@ function liveOverlayTick(now) {
   const cap = document.createElement('canvas');
   cap.width = w; cap.height = h;
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
+  // Motion MAD computed synchronously from raw pixels before the async toBlob
+  // gap, so the result is ready inside the callback without extra canvas work.
+  const motionMad = autoCaptureEnabled ? _computeMotionMad(cap) : null;
   const mySession = overlaySession;  // snapshot before the async gap
   cap.toBlob(async (blob) => {
     // Bail out if the camera was stopped or a new session started while waiting.
@@ -1386,6 +1444,23 @@ function liveOverlayTick(now) {
       const result = JSON.parse(detectContourFn(bytes));
       if (mySession !== overlaySession) { liveLoopBusy = false; return; }
       liveContour = result !== null ? result.contour : null;
+
+      // Auto-capture: fire when a sheet contour is present and the image has
+      // been stable (low motion) for AUTO_CAPTURE_STABLE_REQUIRED cycles.
+      if (autoCaptureEnabled && performance.now() > autoCaptureCooldownUntil) {
+        const isStable = motionMad !== null && motionMad < AUTO_CAPTURE_MAD_THRESHOLD;
+        if (liveContour !== null && isStable) {
+          autoCaptureStableCount++;
+          if (autoCaptureStableCount >= AUTO_CAPTURE_STABLE_REQUIRED) {
+            autoCaptureCooldownUntil = performance.now() + AUTO_CAPTURE_COOLDOWN_MS;
+            autoCaptureStableCount   = 0;
+            autoCapturePrevData      = null; // reset so cooldown period isn't counted
+            btnCapture.click();
+          }
+        } else {
+          autoCaptureStableCount = 0;
+        }
+      }
     } catch (e) {
       console.warn('Live overlay error:', e);
     } finally {
@@ -1394,10 +1469,10 @@ function liveOverlayTick(now) {
   }, 'image/jpeg', 0.7);
 }
 
-function drawContourOverlay(ctx, pts) {
+function drawContourOverlay(ctx, pts, color = '#00ff00') {
   if (!pts || pts.length !== 4) return;
   ctx.save();
-  ctx.strokeStyle = '#00ff00';
+  ctx.strokeStyle = color;
   // Scale line width with image resolution: ~4 px at 1280-wide frames.
   ctx.lineWidth   = Math.max(3, Math.round(ctx.canvas.width / 300));
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
