@@ -296,20 +296,25 @@ def _draw_rect_np(
     color: tuple,
     thickness: int = 1,
 ) -> None:
-    """Draw a rectangle outline on *image* in-place using NumPy indexing."""
+    """Draw a rectangle outline on *image* in-place using NumPy indexing.
+
+    *x2* and *y2* are **exclusive** endpoints (Python/NumPy convention).
+    """
     h, w = image.shape[:2]
     x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(w - 1, x2), min(h - 1, y2)
+    x2, y2 = min(w, x2), min(h, y2)
     if x2 <= x1 or y2 <= y1:
         return
     c = np.array(color, dtype=np.uint8)
     for t in range(thickness):
-        ty1, ty2 = min(y1 + t, h - 1), max(y2 - t, 0)
-        tx1, tx2 = min(x1 + t, w - 1), max(x2 - t, 0)
-        image[ty1, x1 : x2 + 1] = c
-        image[ty2, x1 : x2 + 1] = c
-        image[y1 : y2 + 1, tx1] = c
-        image[y1 : y2 + 1, tx2] = c
+        ty1 = min(y1 + t, y2 - 1)
+        ty2 = max(y2 - 1 - t, y1)
+        tx1 = min(x1 + t, x2 - 1)
+        tx2 = max(x2 - 1 - t, x1)
+        image[ty1, x1:x2] = c
+        image[ty2, x1:x2] = c
+        image[y1:y2, tx1] = c
+        image[y1:y2, tx2] = c
 
 
 def _fill_rect_np(
@@ -320,7 +325,10 @@ def _fill_rect_np(
     y2: int,
     color: tuple,
 ) -> None:
-    """Fill a rectangle on *image* in-place using NumPy indexing."""
+    """Fill a rectangle on *image* in-place using NumPy indexing.
+
+    *x2* and *y2* are **exclusive** endpoints (Python/NumPy convention).
+    """
     h, w = image.shape[:2]
     x1, y1 = max(0, x1), max(0, y1)
     x2, y2 = min(w, x2), min(h, y2)
@@ -394,24 +402,26 @@ def draw_overlay(
     ix1, iy1, ix2, iy2 = id_section_rect
 
     if _HAVE_CV2:
+        # cv2.rectangle uses inclusive endpoints, so we subtract 1 from the
+        # exclusive upper-right corner to match the exclusive-convention callers.
         # Page outline
         cv2.rectangle(out, (0, 0), (w - 1, h - 1), _GREEN, 4)
         # Section rectangles
-        cv2.rectangle(out, (ax1, ay1), (ax2, ay2), _BLUE, 2)
-        cv2.rectangle(out, (ix1, iy1), (ix2, iy2), _PURPLE, 2)
+        cv2.rectangle(out, (ax1, ay1), (ax2 - 1, ay2 - 1), _BLUE, 2)
+        cv2.rectangle(out, (ix1, iy1), (ix2 - 1, iy2 - 1), _PURPLE, 2)
         # All bubble outlines (answer + ID)
         for x, y, bw, bh in all_answer_bubbles:
-            cv2.rectangle(out, (x, y), (x + bw, y + bh), _GRAY, 1)
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _GRAY, 1)
         for x, y, bw, bh in all_id_bubbles:
-            cv2.rectangle(out, (x, y), (x + bw, y + bh), _GRAY, 1)
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _GRAY, 1)
         # Filled bubbles
         for x, y, bw, bh in filled_answer_bubbles:
-            cv2.rectangle(out, (x, y), (x + bw, y + bh), _FILL_GREEN, -1)
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _FILL_GREEN, -1)
         for x, y, bw, bh in filled_id_bubbles:
-            cv2.rectangle(out, (x, y), (x + bw, y + bh), _FILL_GREEN, -1)
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _FILL_GREEN, -1)
     else:
-        # Pure NumPy fallback
-        _draw_rect_np(out, 0, 0, w - 1, h - 1, _GREEN, thickness=4)
+        # Pure NumPy fallback — uses exclusive (x2, y2) endpoints throughout.
+        _draw_rect_np(out, 0, 0, w, h, _GREEN, thickness=4)
         _draw_rect_np(out, ax1, ay1, ax2, ay2, _BLUE, thickness=2)
         _draw_rect_np(out, ix1, iy1, ix2, iy2, _PURPLE, thickness=2)
         for x, y, bw, bh in all_answer_bubbles:

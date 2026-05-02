@@ -64,16 +64,33 @@ class BubbleAnalyzer:
             * ``"M"`` if more than one bubble is filled.
             * ``" "`` if no bubble is filled.
         """
-        filled = [
-            idx
+        answer, _ = self.analyze_answer_row_with_filled(image, bubbles)
+        return answer
+
+    def analyze_answer_row_with_filled(
+        self, image: np.ndarray, bubbles: list[tuple]
+    ) -> tuple[str, list[tuple]]:
+        """Analyse one question row and also return the list of filled regions.
+
+        Returns
+        -------
+        tuple[str, list[tuple]]
+            A ``(answer, filled_regions)`` pair where *answer* is the same
+            value as :meth:`analyze_answer_row` and *filled_regions* is the
+            subset of *bubbles* that were identified as filled.
+        """
+        filled_pairs = [
+            (idx, region)
             for idx, region in enumerate(bubbles)
             if self.analyze_bubble(image, region)
         ]
-        if len(filled) == 0:
-            return " "
-        if len(filled) > 1:
-            return "M"
-        return str(filled[0] + 1)
+        filled_regions = [region for _, region in filled_pairs]
+        filled_indices = [idx for idx, _ in filled_pairs]
+        if len(filled_indices) == 0:
+            return " ", filled_regions
+        if len(filled_indices) > 1:
+            return "M", filled_regions
+        return str(filled_indices[0] + 1), filled_regions
 
     def analyze_id_column(self, image: np.ndarray, bubbles: list[tuple]) -> str:
         """Analyse one ID digit column and return the recognised digit string.
@@ -90,13 +107,30 @@ class BubbleAnalyzer:
             * ``"?"`` if more than one bubble is filled.
             * ``" "`` if no bubble is filled.
         """
-        filled = [
-            idx
+        digit, _ = self.analyze_id_column_with_filled(image, bubbles)
+        return digit
+
+    def analyze_id_column_with_filled(
+        self, image: np.ndarray, bubbles: list[tuple]
+    ) -> tuple[str, list[tuple]]:
+        """Analyse one ID column and also return the list of filled regions.
+
+        Returns
+        -------
+        tuple[str, list[tuple]]
+            A ``(digit, filled_regions)`` pair where *digit* is the same
+            value as :meth:`analyze_id_column` and *filled_regions* is the
+            subset of *bubbles* that were identified as filled.
+        """
+        filled_pairs = [
+            (idx, region)
             for idx, region in enumerate(bubbles)
             if self.analyze_bubble(image, region)
         ]
-        if len(filled) == 0:
-            return " "
-        if len(filled) > 1:
-            return "?"
-        return str(filled[0])
+        filled_regions = [region for _, region in filled_pairs]
+        filled_indices = [idx for idx, _ in filled_pairs]
+        if len(filled_indices) == 0:
+            return " ", filled_regions
+        if len(filled_indices) > 1:
+            return "?", filled_regions
+        return str(filled_indices[0]), filled_regions

@@ -61,37 +61,37 @@ class BubbleSheetGrader:
 
         # Detect student ID
         id_bubbles = self.detector.locate_id_bubbles(normalised)
-        student_id = "".join(
-            self.analyzer.analyze_id_column(normalised, col) for col in id_bubbles
-        )
+        id_chars: list[str] = []
+        filled_id_regions: list = []
+        for col in id_bubbles:
+            ch, filled = self.analyzer.analyze_id_column_with_filled(normalised, col)
+            id_chars.append(ch)
+            filled_id_regions.extend(filled)
+        student_id = "".join(id_chars)
 
         # Detect answers
         answer_rows = self.detector.locate_answer_bubbles(normalised)
-        detected_answers = "".join(
-            self.analyzer.analyze_answer_row(normalised, row) for row in answer_rows
-        )
+        answer_chars: list[str] = []
+        filled_answer_regions: list = []
+        for row in answer_rows:
+            ch, filled = self.analyzer.analyze_answer_row_with_filled(normalised, row)
+            answer_chars.append(ch)
+            filled_answer_regions.extend(filled)
+        detected_answers = "".join(answer_chars)
 
         result = self.grade_answers(detected_answers, student_id)
 
         # Build overlay image ---------------------------------------------------
         all_answer_bubbles = [b for row in answer_rows for b in row]
         all_id_bubbles = [b for col in id_bubbles for b in col]
-        filled_answer = [
-            b
-            for b in all_answer_bubbles
-            if self.analyzer.analyze_bubble(normalised, b)
-        ]
-        filled_id = [
-            b for b in all_id_bubbles if self.analyzer.analyze_bubble(normalised, b)
-        ]
         result.annotated_image = draw_overlay(
             normalised,
             answer_section_rect=self.detector.answer_section_rect(normalised),
             id_section_rect=self.detector.id_section_rect(normalised),
             all_answer_bubbles=all_answer_bubbles,
             all_id_bubbles=all_id_bubbles,
-            filled_answer_bubbles=filled_answer,
-            filled_id_bubbles=filled_id,
+            filled_answer_bubbles=filled_answer_regions,
+            filled_id_bubbles=filled_id_regions,
         )
 
         return result
