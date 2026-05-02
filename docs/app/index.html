@@ -180,20 +180,24 @@
       min-height: 110px;
       border: 2px dashed var(--border);
       border-radius: var(--radius);
-      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       background: var(--bg); overflow: hidden;
-      padding: 0;
     }
     #preview-area.has-image { border-style: solid; border-color: var(--primary); }
     #preview-canvas { max-width: 100%; max-height: 380px; display: none; border-radius: 4px; }
     #preview-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
-    #live-overlay-badge { padding: 6px 12px 0; align-self: flex-start; }
 
     /* ── Camera ── */
     #camera-section { margin-top: 12px; display: none; }
     #camera-video {
       width: 100%; max-height: 380px;
       background: #000; border-radius: var(--radius); display: block;
+    }
+    /* Canvas drawn on top of #camera-video; pointer-events:none so clicks pass through */
+    #camera-overlay {
+      position: absolute; top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none; border-radius: var(--radius);
     }
 
     /* ── Live overlay indicator ── */
@@ -213,8 +217,7 @@
       0%, 100% { opacity: 1; }
       50% { opacity: .35; }
     }
-    #preview-area.live { border-style: solid; border-color: var(--danger); }
-    #live-overlay-badge { display: none; }
+    #live-overlay-badge { display: none; padding: 4px 8px; font-size: .8rem; }
 
     /* ── Results table ── */
     .table-wrap { overflow-x: auto; margin-top: 10px; }
@@ -318,9 +321,16 @@
         <button class="btn-success" id="btn-grade" disabled>▶ Grade Sheet</button>
       </div>
 
-      <!-- Camera viewfinder -->
+      <!-- Camera viewfinder + contour overlay -->
       <div id="camera-section">
-        <video id="camera-video" autoplay playsinline muted></video>
+        <div id="live-overlay-badge">
+          <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+          &nbsp;Green outline = page detected
+        </div>
+        <div style="position: relative;">
+          <video id="camera-video" autoplay playsinline muted></video>
+          <canvas id="camera-overlay"></canvas>
+        </div>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn-primary" id="btn-capture">📸 Capture Frame</button>
           <button class="btn-ghost" id="btn-stop-camera">⏹ Stop Camera</button>
@@ -330,10 +340,6 @@
       <!-- Image preview -->
       <div id="preview-area">
         <span id="preview-hint">Upload an image or use the camera to get started.</span>
-        <div id="live-overlay-badge">
-          <span class="live-badge"><span class="live-dot"></span> LIVE</span>
-          &nbsp;Green outline = page detected
-        </div>
         <canvas id="preview-canvas"></canvas>
       </div>
 
@@ -532,6 +538,7 @@ const btnCapture     = $('btn-capture');
 const btnStopCam     = $('btn-stop-camera');
 const cameraSection  = $('camera-section');
 const cameraVideo    = $('camera-video');
+const cameraOverlay  = $('camera-overlay');
 const previewArea    = $('preview-area');
 const previewCanvas  = $('preview-canvas');
 const previewHint    = $('preview-hint');
@@ -725,35 +732,49 @@ function stopCamera() {
 }
 
 // ── Live overlay ─────────────────────────────────────────────────────────────
-// Mirrors the Android CameraX screen: the preview canvas shows each camera
-// frame annotated with a green quadrilateral whenever the page detector finds
+// Mirrors the Android CameraX screen: a transparent canvas layered over
+// #camera-video shows a green quadrilateral whenever the page detector finds
 // a bubble-sheet boundary.  Detection is throttled to ~1 analysis per second
 // so Pyodide never saturates the main thread.
+// #preview-canvas is never touched during live mode so any previously loaded
+// image preview is preserved when the camera is stopped.
 
 let liveLoopId      = null;   // requestAnimationFrame handle
 let liveLoopBusy    = false;  // guard: skip if previous analysis still running
 let liveContour     = null;   // latest detected contour [[x,y]×4] or null
 let lastOverlayMs   = 0;      // timestamp of the last Python analysis call
+let overlaySession  = 0;      // incremented on start/stop to invalidate stale callbacks
+let liveCanvasW     = 0;      // cached overlay canvas dimensions
+let liveCanvasH     = 0;
+let liveCtx         = null;   // cached 2D rendering context for #camera-overlay
 const OVERLAY_INTERVAL_MS = 900;  // minimum ms between contour-detection calls
 
 function startLiveOverlay() {
   if (liveLoopId !== null) return;
+  overlaySession++;
   liveLoopBusy = false;
   liveContour  = null;
+  liveCanvasW  = 0;   // force dimension sync on first tick
+  liveCanvasH  = 0;
+  liveCtx      = null;
   liveLoopId   = requestAnimationFrame(liveOverlayTick);
   liveOverlayBadge.style.display = 'block';
-  previewArea.classList.add('live');
 }
 
 function stopLiveOverlay() {
+  overlaySession++;  // invalidate any in-flight toBlob callbacks
   if (liveLoopId !== null) {
     cancelAnimationFrame(liveLoopId);
     liveLoopId = null;
   }
   liveLoopBusy = false;
   liveContour  = null;
+  // Clear the overlay canvas so no stale contour lingers after camera stops.
+  if (liveCtx) {
+    liveCtx.clearRect(0, 0, liveCanvasW, liveCanvasH);
+    liveCtx = null;
+  }
   liveOverlayBadge.style.display = 'none';
-  previewArea.classList.remove('live');
 }
 
 function liveOverlayTick(now) {
@@ -764,17 +785,18 @@ function liveOverlayTick(now) {
   const h = cameraVideo.videoHeight;
   if (!w || !h) return;
 
-  // Mirror the current video frame to the preview canvas every tick.
-  previewCanvas.width  = w;
-  previewCanvas.height = h;
-  const ctx = previewCanvas.getContext('2d');
-  ctx.drawImage(cameraVideo, 0, 0);
-  previewCanvas.style.display = 'block';
-  previewHint.style.display   = 'none';
-  previewArea.classList.add('has-image');
+  // Only reallocate the backing store when the video dimensions change.
+  if (w !== liveCanvasW || h !== liveCanvasH) {
+    cameraOverlay.width  = w;
+    cameraOverlay.height = h;
+    liveCanvasW = w;
+    liveCanvasH = h;
+    liveCtx = cameraOverlay.getContext('2d');
+  }
 
-  // Draw the cached contour on top of the mirrored frame.
-  if (liveContour) drawContourOverlay(ctx, liveContour);
+  // Redraw each frame: clear then paint the cached contour (if any).
+  liveCtx.clearRect(0, 0, w, h);
+  if (liveContour) drawContourOverlay(liveCtx, liveContour);
 
   // Throttle the expensive Python call.
   if (liveLoopBusy || now - lastOverlayMs < OVERLAY_INTERVAL_MS) return;
@@ -785,18 +807,23 @@ function liveOverlayTick(now) {
   const cap = document.createElement('canvas');
   cap.width = w; cap.height = h;
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
+  const mySession = overlaySession;  // snapshot before the async gap
   cap.toBlob(async (blob) => {
+    // Bail out if the camera was stopped or a new session started while waiting.
+    if (mySession !== overlaySession) { liveLoopBusy = false; return; }
     if (!blob || !detectContourFn) { liveLoopBusy = false; return; }
     try {
       const bytes  = new Uint8Array(await blob.arrayBuffer());
+      if (mySession !== overlaySession) { return; }  // guard after await
       // detectContourFn returns the JSON string 'null' (no sheet) or
       // '{"contour":[[x,y],…]}' (page found).  JSON.parse maps 'null' → null.
       const result = JSON.parse(detectContourFn(bytes));
-      liveContour  = result !== null ? result.contour : null;
+      if (mySession !== overlaySession) { return; }  // guard after sync Python call
+      liveContour = result !== null ? result.contour : null;
     } catch (e) {
       console.warn('Live overlay error:', e);
     } finally {
-      liveLoopBusy = false;
+      if (mySession === overlaySession) liveLoopBusy = false;
     }
   }, 'image/jpeg', 0.7);
 }
