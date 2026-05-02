@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 import toga
@@ -11,6 +12,8 @@ from toga.style.pack import COLUMN, ROW
 
 if TYPE_CHECKING:
     from bubble_mark.ui.app import BubbleMarkApp
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_region(text: str) -> list | None:
@@ -83,12 +86,14 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
                     title="Select blank bubble sheet",
                     file_types=["jpg", "jpeg", "png", "bmp"],
                 )
-            except Exception:
+            except Exception as exc:
+                logger.exception("File dialog raised an unexpected error: %s", exc)
+                status_label.text = "Error opening file dialog."
                 return
             if result is not None:
                 ref_path_label.text = str(result)
 
-        asyncio.create_task(_pick())
+        asyncio.ensure_future(_pick())
 
     btn_ref = toga.Button(
         "Upload Blank Sheet",

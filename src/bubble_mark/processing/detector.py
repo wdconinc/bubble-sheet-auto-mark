@@ -54,9 +54,11 @@ class BubbleSheetDetector:
         answer_region: Optional[list] = None,
         id_region: Optional[list] = None,
     ) -> None:
+        from bubble_mark.models.settings import _validate_region
+
         self.layout_config: dict = {**self.DEFAULT_LAYOUT, **(layout_config or {})}
-        self.answer_region: Optional[list] = answer_region
-        self.id_region: Optional[list] = id_region
+        self.answer_region: Optional[list] = _validate_region(answer_region)
+        self.id_region: Optional[list] = _validate_region(id_region)
 
     # ------------------------------------------------------------------
     # Public API
@@ -90,10 +92,13 @@ class BubbleSheetDetector:
             x1, y1, x2, y2 = self.answer_region
             px1, py1 = int(w * x1), int(h * y1)
             px2, py2 = int(w * x2), int(h * y2)
-            section = normalised_image[py1:py2, px1:px2]
-            return self._build_bubble_grid(
-                section, num_q, num_c, offset_x=px1, offset_y=py1
-            )
+            if px2 > px1 and py2 > py1:
+                section = normalised_image[py1:py2, px1:px2]
+                return self._build_bubble_grid(
+                    section, num_q, num_c, offset_x=px1, offset_y=py1
+                )
+            # Region collapsed to zero pixels after int rounding – fall through
+            # to the default heuristic so we never return an empty grid.
 
         # Default: answer section occupies roughly the top 70% of the sheet.
         section = self._answer_section(normalised_image)
@@ -115,10 +120,18 @@ class BubbleSheetDetector:
             x1, y1, x2, y2 = self.id_region
             px1, py1 = int(w * x1), int(h * y1)
             px2, py2 = int(w * x2), int(h * y2)
-            section = normalised_image[py1:py2, px1:px2]
-            raw_grid = self._build_bubble_grid(
-                section, num_choices, num_d, offset_x=px1, offset_y=py1
-            )
+            if px2 > px1 and py2 > py1:
+                section = normalised_image[py1:py2, px1:px2]
+                raw_grid = self._build_bubble_grid(
+                    section, num_choices, num_d, offset_x=px1, offset_y=py1
+                )
+            else:
+                # Degenerate region after int rounding – fall back to heuristic.
+                id_top = int(normalised_image.shape[0] * 0.74)
+                section = self._id_section(normalised_image)
+                raw_grid = self._build_bubble_grid(
+                    section, num_choices, num_d, offset_y=id_top
+                )
         else:
             id_top = int(normalised_image.shape[0] * 0.74)
             section = self._id_section(normalised_image)
