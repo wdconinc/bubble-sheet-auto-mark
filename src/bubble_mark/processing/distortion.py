@@ -332,8 +332,7 @@ def _remap_numpy(
     # BORDER_CONSTANT: samples outside the source image contribute zero,
     # matching cv2.remap(borderMode=cv2.BORDER_CONSTANT, borderValue=0).
     in_bounds = (
-        (x_raw >= 0.0) & (x_raw <= iw - 1.0) &
-        (y_raw >= 0.0) & (y_raw <= ih - 1.0)
+        (x_raw >= 0.0) & (x_raw <= iw - 1.0) & (y_raw >= 0.0) & (y_raw <= ih - 1.0)
     )
 
     # Integer floor coordinates, clamped for safe array indexing.
