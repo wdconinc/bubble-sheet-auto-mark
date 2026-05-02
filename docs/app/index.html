@@ -3202,7 +3202,8 @@ function setQrStatus(msg, isError) {
 }
 
 function applyQrResult(rawText) {
-  const shuffle = parseInt($('qr-shuffle').value) || 0;
+  const rawSeed = ($('qr-shuffle').value || '0').trim();
+  const shuffle = BigInt(rawSeed.match(/^\d+$/) ? rawSeed : '0') & 0xFFFFFFFFn;
   const decoded = unshuffleAnswersBigInt(rawText.trim(), shuffle);
   $('answer-key').value = decoded;
   saveSettings();
@@ -3211,7 +3212,7 @@ function applyQrResult(rawText) {
 
 async function decodeQrFromImageData(imageData) {
   if (!('BarcodeDetector' in window)) {
-    setQrStatus('BarcodeDetector not supported in this browser. Try Chrome or Edge, or upload the QR image.', true);
+    setQrStatus('BarcodeDetector not supported in this browser. QR scanning requires Chrome or Edge.', true);
     return false;
   }
   try {
@@ -3257,8 +3258,14 @@ function stopQrCamera() {
 }
 
 async function startQrCamera() {
+  stopQrCamera();
   if (!('BarcodeDetector' in window)) {
-    setQrStatus('BarcodeDetector API not available. Use "Upload QR Image" instead.', true);
+    setQrStatus('BarcodeDetector API not available. QR scanning requires Chrome or Edge.', true);
+    qrCameraSection.style.display = 'block';
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setQrStatus('Camera not available (requires a secure context or is not supported).', true);
     qrCameraSection.style.display = 'block';
     return;
   }
@@ -3295,6 +3302,15 @@ $('btn-qr-stop-camera').addEventListener('click', () => {
 });
 
 $('btn-qr-upload').addEventListener('click', () => qrFileInput.click());
+
+// Disable both QR buttons (and the upload label) if BarcodeDetector is unavailable.
+if (!('BarcodeDetector' in window)) {
+  ['btn-scan-qr', 'btn-qr-upload'].forEach((id) => {
+    const el = $(id);
+    el.disabled = true;
+    el.title = 'Requires BarcodeDetector API (Chrome / Edge)';
+  });
+}
 
 qrFileInput.addEventListener('change', async () => {
   const file = qrFileInput.files[0];

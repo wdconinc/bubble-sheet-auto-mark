@@ -131,7 +131,8 @@ class TestShuffle:
         assert self._unshuffle(shuffled, 42) == original
 
     def test_round_trip_long(self):
-        original = "1234512345123451234512345"
+        # All-unique characters so inequality assertions are unambiguous
+        original = "ABCDEFGHIJKLMNOPQRSTUVWXY"
         shuffled = self._shuffle(original, 7)
         assert shuffled != original  # non-trivial permutation for seed != 0
         assert self._unshuffle(shuffled, 42) != original  # wrong seed doesn't work
