@@ -1406,7 +1406,7 @@ btnGrade.addEventListener('click', async () => {
         gradedSheets.push({ name, bytes, result: null, annotatedB64: null });
       } else {
         const annotatedB64 = result.annotated_image_b64 || null;
-        const { annotated_image_b64: _d, ref_warning: _w, ...resultToSave } = result;
+        const { annotated_image_b64: _annotated, ref_warning: _ref_warning, ...resultToSave } = result;
         results.push(resultToSave);
         gradedSheets.push({ name, bytes, result: resultToSave, annotatedB64, resultIdx: results.length - 1 });
 
@@ -1556,7 +1556,7 @@ btnRegrade.addEventListener('click', async () => {
       setStatus(`No bubble sheet detected when regrading "${sheet.name}".`, 'error');
     } else {
       const annotatedB64 = result.annotated_image_b64 || null;
-      const { annotated_image_b64: _d, ref_warning: _w, ...resultToSave } = result;
+      const { annotated_image_b64: _annotated, ref_warning: _ref_warning, ...resultToSave } = result;
 
       sheet.result     = resultToSave;
       sheet.annotatedB64 = annotatedB64;
