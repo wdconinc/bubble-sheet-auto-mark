@@ -339,12 +339,12 @@ def _fill_rect_np(
 
 def draw_overlay(
     image: np.ndarray,
-    answer_section_rect: tuple,
-    id_section_rect: tuple,
-    all_answer_bubbles: list,
-    all_id_bubbles: list,
-    filled_answer_bubbles: list,
-    filled_id_bubbles: list,
+    answer_section_rect: tuple[int, int, int, int],
+    id_section_rect: tuple[int, int, int, int],
+    all_answer_bubbles: list[tuple[int, int, int, int]],
+    all_id_bubbles: list[tuple[int, int, int, int]],
+    filled_answer_bubbles: list[tuple[int, int, int, int]],
+    filled_id_bubbles: list[tuple[int, int, int, int]],
 ) -> np.ndarray:
     """Return a BGR copy of *image* with a grading overlay drawn on it.
 
@@ -379,15 +379,15 @@ def draw_overlay(
     np.ndarray
         A new BGR ``uint8`` array with the overlay applied.
     """
-    # Ensure output is a 3-channel BGR copy
+    # Ensure output is a 3-channel BGR uint8 copy
     if image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 1):
         gray = image if image.ndim == 2 else image[:, :, 0]
         if _HAVE_CV2:
             out = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
         else:
-            out = np.stack([gray, gray, gray], axis=-1)
+            out = np.stack([gray, gray, gray], axis=-1).astype(np.uint8)
     else:
-        out = image.copy()
+        out = image.copy().astype(np.uint8)
 
     h, w = out.shape[:2]
 

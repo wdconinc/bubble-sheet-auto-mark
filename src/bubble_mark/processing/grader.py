@@ -53,8 +53,6 @@ class BubbleSheetGrader:
         it that shows the page outline, answer and ID section regions, all
         bubble cells, and the filled bubbles that were identified.
         """
-        # Import here to avoid circular imports at module load time
-
         normalised = self.detector.detect(image)
         if normalised is None:
             return None
