@@ -53,6 +53,39 @@ def _validate_edge_lines(lines: Optional[list]) -> Optional[list]:
         return None
 
 
+def _validate_edge_polylines(polylines: Optional[dict]) -> Optional[dict]:
+    """Return a normalised *polylines* dict if valid, else *None*.
+
+    A valid edge-polylines value is a dict with keys ``'top'``, ``'bottom'``,
+    ``'left'``, and ``'right'``.  Each value may be *None* (edge not yet
+    drawn) or a list of at least two ``[x, y]`` numeric coordinate pairs.
+    Returns *None* if *polylines* is not a dict or if any non-*None* edge
+    entry fails validation.
+    """
+    if polylines is None:
+        return None
+    if not isinstance(polylines, dict):
+        return None
+    result: dict = {}
+    for key in ("top", "bottom", "left", "right"):
+        pts = polylines.get(key)
+        if pts is None:
+            result[key] = None
+            continue
+        if not isinstance(pts, (list, tuple)) or len(pts) < 2:
+            return None
+        validated_pts = []
+        try:
+            for pt in pts:
+                if not isinstance(pt, (list, tuple)) or len(pt) != 2:
+                    return None
+                validated_pts.append([float(pt[0]), float(pt[1])])
+        except (TypeError, ValueError):
+            return None
+        result[key] = validated_pts
+    return result
+
+
 class AppSettings:
     """Application-wide settings.
 
@@ -79,6 +112,13 @@ class AppSettings:
         drawn by the user on the reference sheet to mark the four page edges.
         Used by :func:`~bubble_mark.processing.distortion.correct_distortion_from_lines`
         to compute the perspective warp for the reference setup flow.
+    page_edge_polylines:
+        Optional dict with keys ``'top'``, ``'bottom'``, ``'left'``, ``'right'``,
+        each mapping to a list of at least two ``[x, y]`` coordinate pairs.
+        Used by
+        :func:`~bubble_mark.processing.distortion.correct_distortion_from_polylines`
+        when the sheet edges are curved (e.g., sheet not on a flat surface).
+        Takes priority over *page_edge_lines* when all four edges are present.
     reference_color_channel:
         Index of the BGR color channel to use as the primary print-color
         reference channel (0=Blue, 1=Green, 2=Red).  Defaults to ``1``
@@ -93,6 +133,7 @@ class AppSettings:
         answer_region: Optional[list] = None,
         id_region: Optional[list] = None,
         page_edge_lines: Optional[list] = None,
+        page_edge_polylines: Optional[dict] = None,
         reference_color_channel: int = 1,
     ) -> None:
         self.layout_config: dict = {**_DEFAULT_LAYOUT, **(layout_config or {})}
@@ -101,6 +142,9 @@ class AppSettings:
         self.answer_region: Optional[list] = _validate_region(answer_region)
         self.id_region: Optional[list] = _validate_region(id_region)
         self.page_edge_lines: Optional[list] = _validate_edge_lines(page_edge_lines)
+        self.page_edge_polylines: Optional[dict] = _validate_edge_polylines(
+            page_edge_polylines
+        )
         self.reference_color_channel: int = int(reference_color_channel)
 
     # ------------------------------------------------------------------
@@ -115,6 +159,7 @@ class AppSettings:
             "answer_region": self.answer_region,
             "id_region": self.id_region,
             "page_edge_lines": self.page_edge_lines,
+            "page_edge_polylines": self.page_edge_polylines,
             "reference_color_channel": self.reference_color_channel,
         }
 
@@ -127,6 +172,7 @@ class AppSettings:
             answer_region=d.get("answer_region"),
             id_region=d.get("id_region"),
             page_edge_lines=d.get("page_edge_lines"),
+            page_edge_polylines=d.get("page_edge_polylines"),
             reference_color_channel=d.get("reference_color_channel", 1),
         )
 

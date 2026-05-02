@@ -249,3 +249,149 @@ class TestAppSettingsNewFields:
         s = AppSettings.from_dict(d)
         assert s.page_edge_lines is None
         assert s.reference_color_channel == 1
+
+
+class TestValidateEdgePolylines:
+    def test_none_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        assert _validate_edge_polylines(None) is None
+
+    def test_non_dict_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        assert _validate_edge_polylines([[0, 0], [1, 1]]) is None
+
+    def test_valid_all_edges(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [[0, 0], [100, 0]],
+            "bottom": [[0, 200], [100, 200]],
+            "left": [[0, 0], [0, 200]],
+            "right": [[100, 0], [100, 200]],
+        }
+        result = _validate_edge_polylines(polys)
+        assert result is not None
+        assert len(result["top"]) == 2
+
+    def test_edge_with_none_is_allowed(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [[0, 0], [100, 0]],
+            "bottom": None,
+            "left": None,
+            "right": None,
+        }
+        result = _validate_edge_polylines(polys)
+        assert result is not None
+        assert result["top"] is not None
+        assert result["bottom"] is None
+
+    def test_single_point_edge_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [[0, 0]],  # too few points
+            "bottom": [[0, 200], [100, 200]],
+            "left": [[0, 0], [0, 200]],
+            "right": [[100, 0], [100, 200]],
+        }
+        assert _validate_edge_polylines(polys) is None
+
+    def test_wrong_point_length_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [[0, 0, 99], [100, 0, 99]],  # 3-element points
+            "bottom": [[0, 200], [100, 200]],
+            "left": [[0, 0], [0, 200]],
+            "right": [[100, 0], [100, 200]],
+        }
+        assert _validate_edge_polylines(polys) is None
+
+    def test_non_numeric_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [["a", "b"], ["c", "d"]],
+            "bottom": [[0, 200], [100, 200]],
+            "left": [[0, 0], [0, 200]],
+            "right": [[100, 0], [100, 200]],
+        }
+        assert _validate_edge_polylines(polys) is None
+
+    def test_multi_point_edge_accepted(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [[0, 0], [50, 5], [100, 0]],
+            "bottom": [[0, 200], [50, 195], [100, 200]],
+            "left": [[0, 0], [2, 100], [0, 200]],
+            "right": [[100, 0], [98, 100], [100, 200]],
+        }
+        result = _validate_edge_polylines(polys)
+        assert result is not None
+        assert len(result["top"]) == 3
+
+    def test_coordinates_converted_to_float(self):
+        from bubble_mark.models.settings import _validate_edge_polylines
+
+        polys = {
+            "top": [[0, 0], [100, 0]],
+            "bottom": [[0, 200], [100, 200]],
+            "left": [[0, 0], [0, 200]],
+            "right": [[100, 0], [100, 200]],
+        }
+        result = _validate_edge_polylines(polys)
+        assert result is not None
+        assert isinstance(result["top"][0][0], float)
+
+
+class TestAppSettingsPolylines:
+    def test_default_page_edge_polylines_is_none(self):
+        assert AppSettings().page_edge_polylines is None
+
+    def test_valid_polylines_stored(self):
+        polys = {
+            "top": [[0.0, 0.0], [100.0, 0.0]],
+            "bottom": [[0.0, 200.0], [100.0, 200.0]],
+            "left": [[0.0, 0.0], [0.0, 200.0]],
+            "right": [[100.0, 0.0], [100.0, 200.0]],
+        }
+        s = AppSettings(page_edge_polylines=polys)
+        assert s.page_edge_polylines is not None
+
+    def test_invalid_polylines_stored_as_none(self):
+        s = AppSettings(page_edge_polylines={"top": [[0, 0]]})  # only 1 point
+        assert s.page_edge_polylines is None
+
+    def test_round_trip(self):
+        polys = {
+            "top": [[0.0, 0.0], [100.0, 0.0]],
+            "bottom": [[0.0, 200.0], [100.0, 200.0]],
+            "left": [[0.0, 0.0], [0.0, 200.0]],
+            "right": [[100.0, 0.0], [100.0, 200.0]],
+        }
+        orig = AppSettings(page_edge_polylines=polys)
+        restored = AppSettings.from_dict(orig.to_dict())
+        assert restored.page_edge_polylines is not None
+        assert len(restored.page_edge_polylines["top"]) == 2
+
+    def test_to_dict_contains_key(self):
+        d = AppSettings().to_dict()
+        assert "page_edge_polylines" in d
+
+    def test_load_legacy_dict_without_polylines(self):
+        d = {
+            "layout_config": {},
+            "reference_image_path": None,
+            "fill_threshold": 0.5,
+            "answer_region": None,
+            "id_region": None,
+            "page_edge_lines": None,
+            "reference_color_channel": 1,
+        }
+        s = AppSettings.from_dict(d)
+        assert s.page_edge_polylines is None

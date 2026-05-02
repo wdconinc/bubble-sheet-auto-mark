@@ -1,12 +1,20 @@
 """Distortion correction helpers for bubble sheet images.
 
-Two correction strategies are provided:
+Three correction strategies are provided:
 
 1. **Line-based** (:func:`correct_distortion_from_lines`): the user supplies
    four edge lines drawn interactively on the reference sheet; the four page
    corners are obtained as line intersections and a perspective warp is applied.
 
-2. **Correlation-based** (:func:`estimate_distortion_from_reference`): given a
+2. **Polyline-based** (:func:`correct_distortion_from_polylines`): each of the
+   four page edges is represented as an ordered polyline (a list of two or more
+   points) instead of a single straight line.  A *bilinear Coons patch* maps
+   the curved quadrilateral defined by the four polylines to a rectangular
+   output image via ``cv2.remap`` (with a pure-NumPy bilinear fallback).  This
+   corrects the curvature that occurs when the sheet cannot be placed on a
+   perfectly flat surface.
+
+3. **Correlation-based** (:func:`estimate_distortion_from_reference`): given a
    distortion-corrected reference image and an incoming sheet image, a
    normalised cross-correlation (phase correlation) is used to estimate the
    dominant translational offset between the two images.  A translation-only
@@ -173,6 +181,245 @@ def correct_distortion_from_lines(
 
     contour = corners.reshape(4, 1, 2)
     return perspective_transform(image, contour)
+
+
+# ---------------------------------------------------------------------------
+# Polyline helpers
+# ---------------------------------------------------------------------------
+
+
+def _eval_polyline_vec(
+    pts: list,
+    t_arr: np.ndarray,
+) -> np.ndarray:
+    """Evaluate a 2-D polyline at an array of parameter values in [0, 1].
+
+    Points are assumed uniformly spaced in parameter space (equal arc-length
+    per segment in parameter, not necessarily in pixel space).
+
+    Parameters
+    ----------
+    pts:
+        List of ``[x, y]`` control points (at least 2).
+    t_arr:
+        1-D array of parameter values in ``[0, 1]``.
+
+    Returns
+    -------
+    np.ndarray
+        Shape ``(len(t_arr), 2)`` float64 array of interpolated coordinates.
+    """
+    pts_arr = np.array(pts, dtype=np.float64)  # (N, 2)
+    n = len(pts_arr)
+    if n == 1:
+        return np.tile(pts_arr[0], (len(t_arr), 1))
+
+    idx_float = np.asarray(t_arr, dtype=np.float64) * (n - 1)
+    lo = np.clip(np.floor(idx_float).astype(np.int32), 0, n - 2)
+    frac = (idx_float - lo)[:, np.newaxis]  # (M, 1)
+    return (1.0 - frac) * pts_arr[lo] + frac * pts_arr[lo + 1]
+
+
+def _build_coons_remap(
+    top: list,
+    bottom: list,
+    left: list,
+    right: list,
+    out_h: int,
+    out_w: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build (map_x, map_y) remap arrays using a bilinear Coons patch.
+
+    The four edge polylines define a curved quadrilateral in the source image.
+    For each output pixel at normalised position ``(u, v)`` the corresponding
+    source pixel is computed via:
+
+    .. math::
+
+        P(u,v) = (1-v)\\,T(u) + v\\,B(u) + (1-u)\\,L(v) + u\\,R(v)
+                 - \\bigl[(1-u)(1-v)\\,P_{TL}
+                          + u(1-v)\\,P_{TR}
+                          + (1-u)v\\,P_{BL}
+                          + uv\\,P_{BR}\\bigr]
+
+    where ``T``, ``B``, ``L``, ``R`` are the top, bottom, left, and right
+    edge polylines evaluated at the appropriate parameter.
+
+    Parameters
+    ----------
+    top, bottom:
+        Polylines for the top and bottom edges, ordered **left to right**.
+    left, right:
+        Polylines for the left and right edges, ordered **top to bottom**.
+    out_h, out_w:
+        Desired output image dimensions.
+
+    Returns
+    -------
+    map_x, map_y : np.ndarray
+        Each is a ``(out_h, out_w)`` float32 array suitable for
+        ``cv2.remap`` or :func:`_remap_numpy`.
+    """
+    top_arr = np.array(top, dtype=np.float64)
+    bottom_arr = np.array(bottom, dtype=np.float64)
+    left_arr = np.array(left, dtype=np.float64)
+    right_arr = np.array(right, dtype=np.float64)
+
+    # Corner estimates: average the two edge endpoints that meet at each corner
+    # to be robust against slight user-drawing inaccuracies.
+    tl = (top_arr[0] + left_arr[0]) / 2.0
+    tr = (top_arr[-1] + right_arr[0]) / 2.0
+    bl = (bottom_arr[0] + left_arr[-1]) / 2.0
+    br = (bottom_arr[-1] + right_arr[-1]) / 2.0
+
+    u_1d = np.linspace(0.0, 1.0, out_w)  # (W,)
+    v_1d = np.linspace(0.0, 1.0, out_h)  # (H,)
+    U, V = np.meshgrid(u_1d, v_1d)  # each (H, W)
+
+    u_flat = U.ravel()  # (H*W,)
+    v_flat = V.ravel()  # (H*W,)
+
+    T = _eval_polyline_vec(top, u_flat)  # (H*W, 2)
+    B = _eval_polyline_vec(bottom, u_flat)
+    L = _eval_polyline_vec(left, v_flat)
+    R = _eval_polyline_vec(right, v_flat)
+
+    u_col = u_flat[:, np.newaxis]  # (H*W, 1)
+    v_col = v_flat[:, np.newaxis]
+
+    # Bilinear Coons patch
+    corners = (
+        (1 - u_col) * (1 - v_col) * tl
+        + u_col * (1 - v_col) * tr
+        + (1 - u_col) * v_col * bl
+        + u_col * v_col * br
+    )  # (H*W, 2)
+
+    P = (1 - v_col) * T + v_col * B + (1 - u_col) * L + u_col * R - corners
+
+    map_x = P[:, 0].reshape(out_h, out_w).astype(np.float32)
+    map_y = P[:, 1].reshape(out_h, out_w).astype(np.float32)
+    return map_x, map_y
+
+
+def _remap_numpy(
+    image: np.ndarray,
+    map_x: np.ndarray,
+    map_y: np.ndarray,
+) -> np.ndarray:
+    """Bilinear remap using pure NumPy (cv2-free fallback).
+
+    Samples *image* at the fractional source coordinates given by *map_x* and
+    *map_y* using bilinear interpolation, filling out-of-bounds areas with
+    zeros.
+
+    Parameters
+    ----------
+    image:
+        Source image (BGR or grayscale ``uint8``).
+    map_x, map_y:
+        Float32 arrays of shape ``(out_h, out_w)`` specifying the source
+        x and y coordinates for each output pixel.
+
+    Returns
+    -------
+    np.ndarray
+        Resampled image of shape ``(out_h, out_w[, C])``, ``uint8``.
+    """
+    ih, iw = image.shape[:2]
+
+    x = np.clip(map_x.astype(np.float64), 0.0, iw - 1.0)
+    y = np.clip(map_y.astype(np.float64), 0.0, ih - 1.0)
+
+    x0 = np.floor(x).astype(np.int32)
+    x1 = np.minimum(x0 + 1, iw - 1)
+    y0 = np.floor(y).astype(np.int32)
+    y1 = np.minimum(y0 + 1, ih - 1)
+
+    wa = ((x1 - x) * (y1 - y)).astype(np.float32)
+    wb = ((x - x0) * (y1 - y)).astype(np.float32)
+    wc = ((x1 - x) * (y - y0)).astype(np.float32)
+    wd = ((x - x0) * (y - y0)).astype(np.float32)
+
+    if image.ndim == 3:
+        wa = wa[:, :, np.newaxis]
+        wb = wb[:, :, np.newaxis]
+        wc = wc[:, :, np.newaxis]
+        wd = wd[:, :, np.newaxis]
+
+    result = (
+        wa * image[y0, x0].astype(np.float32)
+        + wb * image[y0, x1].astype(np.float32)
+        + wc * image[y1, x0].astype(np.float32)
+        + wd * image[y1, x1].astype(np.float32)
+    )
+    return np.clip(result, 0, 255).astype(np.uint8)
+
+
+# ---------------------------------------------------------------------------
+# Public API – polyline-based correction
+# ---------------------------------------------------------------------------
+
+
+def correct_distortion_from_polylines(
+    image: np.ndarray,
+    edge_polylines: dict,
+) -> Optional[np.ndarray]:
+    """Correct non-planar-sheet distortion using a bilinear Coons patch warp.
+
+    Each of the four page edges is described as an ordered polyline (a list of
+    two or more ``[x, y]`` coordinate pairs) rather than a single straight
+    line.  A *bilinear Coons patch* maps the curved quadrilateral defined by
+    the four polylines to a rectangular output image.  This corrects the
+    curvature introduced when the reference sheet cannot be placed on a flat
+    surface.
+
+    The output dimensions are derived from the arc-lengths of the edge
+    polylines (same convention as :func:`~bubble_mark.processing.image_utils
+    .perspective_transform`).
+
+    Parameters
+    ----------
+    image:
+        Source image (BGR or grayscale ``uint8`` NumPy array).
+    edge_polylines:
+        Dictionary with keys ``'top'``, ``'bottom'``, ``'left'``, ``'right'``.
+        Each value is an ordered list of at least two ``[x, y]`` coordinate
+        pairs in source-image pixel coordinates.
+
+        * ``'top'`` / ``'bottom'``: ordered **left to right**.
+        * ``'left'`` / ``'right'``: ordered **top to bottom**.
+
+    Returns
+    -------
+    np.ndarray or None
+        The corrected image, or *None* if any required edge polyline is
+        missing or contains fewer than two points.
+    """
+    top = edge_polylines.get("top")
+    bottom = edge_polylines.get("bottom")
+    left = edge_polylines.get("left")
+    right = edge_polylines.get("right")
+
+    for pts in (top, bottom, left, right):
+        if not pts or len(pts) < 2:
+            return None
+
+    # Output dimensions: max of the arc-lengths of the opposing edge pairs.
+    def _arc_length(pts_list: list) -> float:
+        arr = np.array(pts_list, dtype=np.float64)
+        return float(np.sum(np.linalg.norm(np.diff(arr, axis=0), axis=1)))
+
+    out_w = max(1, int(round(max(_arc_length(top), _arc_length(bottom)))))
+    out_h = max(1, int(round(max(_arc_length(left), _arc_length(right)))))
+
+    map_x, map_y = _build_coons_remap(top, bottom, left, right, out_h, out_w)
+
+    if _HAVE_CV2:
+        return cv2.remap(
+            image, map_x, map_y, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT
+        )
+    return _remap_numpy(image, map_x, map_y)
 
 
 # ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import bubble_mark.processing.distortion as _dist_mod
 from bubble_mark.processing.distortion import (
     apply_homography,
     correct_distortion_from_lines,
+    correct_distortion_from_polylines,
     estimate_distortion_from_reference,
     find_intersection,
 )
@@ -224,3 +225,116 @@ class TestApplyHomography:
         H[1, 2] = 3  # shift down by 3
         result = apply_homography(img, H)
         assert result.shape == img.shape
+
+
+# ---------------------------------------------------------------------------
+# correct_distortion_from_polylines
+# ---------------------------------------------------------------------------
+
+
+class TestCorrectDistortionFromPolylines:
+    """Tests for the bilinear Coons patch polyline warp."""
+
+    @staticmethod
+    def _rect_polylines(x1=50, y1=50, x2=350, y2=450, pts_per_edge=2):
+        """Return four polylines that form a rectangle (optionally subdivided)."""
+        n = pts_per_edge
+        top    = [[x1 + (x2 - x1) * i / (n - 1), y1] for i in range(n)]
+        bottom = [[x1 + (x2 - x1) * i / (n - 1), y2] for i in range(n)]
+        left   = [[x1, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
+        right  = [[x2, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
+        return {"top": top, "bottom": bottom, "left": left, "right": right}
+
+    def test_returns_ndarray_for_rect(self):
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+
+    def test_output_is_3d_bgr(self):
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert result.ndim == 3
+        assert result.shape[2] == 3
+
+    def test_output_size_derived_from_edge_lengths(self):
+        # Rectangle 200×300 pixels
+        polys = self._rect_polylines(x1=0, y1=0, x2=200, y2=300)
+        img = np.full((400, 300, 3), 128, dtype=np.uint8)
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert result.shape[1] == 200  # width from top/bottom arc-length
+        assert result.shape[0] == 300  # height from left/right arc-length
+
+    def test_missing_edge_returns_none(self):
+        img = np.full((200, 200, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        del polys["right"]
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is None
+
+    def test_single_point_edge_returns_none(self):
+        img = np.full((200, 200, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        polys["top"] = [[50, 50]]  # only one point
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is None
+
+    def test_curved_top_edge_does_not_crash(self):
+        """A slightly curved top edge should still produce a valid image."""
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        # Top edge curves slightly upward in the middle
+        polys = {
+            "top": [[50, 50], [200, 30], [350, 50]],
+            "bottom": [[50, 450], [200, 450], [350, 450]],
+            "left": [[50, 50], [50, 250], [50, 450]],
+            "right": [[350, 50], [350, 250], [350, 450]],
+        }
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert result.ndim == 3
+
+    def test_no_cv2_fallback_returns_valid_image(self, no_cv2):
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+
+    def test_grayscale_input(self):
+        img = np.full((300, 400), 180, dtype=np.uint8)
+        polys = self._rect_polylines(x1=20, y1=20, x2=380, y2=280)
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert result.ndim == 2
+
+    def test_two_point_edge_equivalent_to_straight_line(self):
+        """With 2-point (straight) polylines the result should resemble the
+        perspective-transform output of the same rectangle."""
+        img = np.zeros((500, 400, 3), dtype=np.uint8)
+        # Draw a distinctive pattern inside the rectangle
+        img[50:450, 50:350] = 128
+        img[100:400, 100:300] = 200
+        polys = self._rect_polylines(x1=50, y1=50, x2=350, y2=450)
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        # Output must be non-empty and have reasonable pixel values
+        assert result.shape[0] > 0 and result.shape[1] > 0
+        assert result.max() > 50  # not all black
+
+    def test_subdivided_rect_same_as_two_point(self):
+        """Subdividing a straight edge into more points should give the same
+        output (within rounding) as the 2-point version."""
+        img = np.random.RandomState(0).randint(0, 256, (500, 400, 3), dtype=np.uint8)
+        polys_2 = self._rect_polylines(pts_per_edge=2)
+        polys_5 = self._rect_polylines(pts_per_edge=5)
+        r2 = correct_distortion_from_polylines(img, polys_2)
+        r5 = correct_distortion_from_polylines(img, polys_5)
+        assert r2 is not None and r5 is not None
+        assert r2.shape == r5.shape
+        # Results must be pixel-close (allow small bilinear interpolation diffs)
+        assert np.mean(np.abs(r2.astype(np.int32) - r5.astype(np.int32))) < 2

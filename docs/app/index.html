@@ -337,6 +337,10 @@
     #ref-canvas.mode-edge-bottom,
     #ref-canvas.mode-edge-left,
     #ref-canvas.mode-edge-right { cursor: crosshair; border-color: #7c3aed; }
+    #ref-canvas.mode-poly-top,
+    #ref-canvas.mode-poly-bottom,
+    #ref-canvas.mode-poly-left,
+    #ref-canvas.mode-poly-right  { cursor: cell;       border-color: #0ea5e9; }
 
     /* ── Graded-sheets tab bar ── */
     #graded-tabs-section { margin-top: 12px; }
@@ -495,6 +499,14 @@
               <button class="btn-ghost" id="btn-edge-left"   type="button" data-edge="left">◄ Left Edge</button>
               <button class="btn-ghost" id="btn-edge-right"  type="button" data-edge="right">► Right Edge</button>
               <button class="btn-ghost" id="btn-edge-clear"  type="button">✕ Clear Lines</button>
+            </div>
+            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:.85rem">
+              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"
+                     title="Enable polyline mode to draw curved edges by clicking multiple points">
+                <input type="checkbox" id="chk-polyline-mode" style="width:14px;height:14px;cursor:pointer;accent-color:#0ea5e9">
+                Curved edges (polyline mode)
+              </label>
+              <button class="btn-ghost" id="btn-poly-clear" type="button" style="display:none">✕ Clear Polylines</button>
             </div>
             <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
             <div class="btn-row" style="margin-top:6px">
@@ -818,7 +830,7 @@ def detect_contour(image_bytes_js):
     return json.dumps({'contour': pts})
 
 
-def process_reference_image(image_bytes_js, edge_lines_json='null'):
+def process_reference_image(image_bytes_js, edge_lines_json='null', edge_polylines_json='null'):
     """Correct perspective distortion and analyse color channels of a reference sheet.
 
     Parameters
@@ -829,6 +841,11 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
         JSON list of four ``[x1, y1, x2, y2]`` edge lines in the original
         image pixel coordinate space, or ``'null'`` / ``'[]'`` to use
         automatic page-contour detection instead.
+    edge_polylines_json : str
+        JSON dict with keys ``'top'``, ``'bottom'``, ``'left'``, ``'right'``,
+        each an ordered list of ``[x, y]`` coordinate pairs, or ``'null'``.
+        When all four edges contain at least two points, polyline-based
+        Coons-patch correction is used instead of the straight-line method.
 
     Returns a JSON string with keys:
         corrected_image_b64  – PNG of the perspective-corrected image (base64)
@@ -848,9 +865,18 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
         rgb  = np.array(pil, dtype=np.uint8)
         bgr  = rgb[:, :, ::-1].copy()
 
-        edge_lines = json.loads(str(edge_lines_json))
+        edge_lines     = json.loads(str(edge_lines_json))
+        edge_polylines = json.loads(str(edge_polylines_json))
 
-        def _apply_correction(img, lines):
+        def _apply_correction(img, lines, polylines):
+            # Prefer polylines when all four edges are defined.
+            if (polylines and isinstance(polylines, dict) and
+                    all(isinstance(polylines.get(k), list) and len(polylines[k]) >= 2
+                        for k in ('top', 'bottom', 'left', 'right'))):
+                from bubble_mark.processing.distortion import correct_distortion_from_polylines
+                result = correct_distortion_from_polylines(img, polylines)
+                if result is not None:
+                    return result
             if lines and len(lines) == 4:
                 from bubble_mark.processing.distortion import correct_distortion_from_lines
                 result = correct_distortion_from_lines(img, lines)
@@ -861,7 +887,7 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
                 return perspective_transform(img, contour)
             return img
 
-        corrected = _apply_correction(bgr, edge_lines)
+        corrected = _apply_correction(bgr, edge_lines, edge_polylines)
 
         variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
         best_channel = int(np.argmax(variances))
@@ -1065,6 +1091,12 @@ let isEdgeDrawing = false;
 let edgeDrawStart   = null;   // {x, y} in canvas pixels
 let edgeDrawCurrent = null;   // {x, y} in canvas pixels
 
+// Polyline edge state (curved-edge mode)
+// Each value is [[x,y],...] in ORIGINAL IMAGE pixel coords, or null
+let refEdgePolylines = { top: null, bottom: null, left: null, right: null };
+let polylineMode     = false;  // whether polyline mode checkbox is checked
+let polylineDrawEdge = null;   // 'top'|'bottom'|'left'|'right'|null (active edge)
+
 // ── DOM ──────────────────────────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -1175,6 +1207,7 @@ async function init() {
   restoreSettings();
   restoreRegions();
   restoreEdgeLines();
+  restoreEdgePolylines();
   restoreResults();
 
   // Open IndexedDB and restore persisted images (fail silently if unavailable).
@@ -1532,7 +1565,8 @@ const LS_SETTINGS      = 'bsam_settings';
 const LS_ANSWER_REGION = 'bsam_answer_region';
 const LS_ID_REGION     = 'bsam_id_region';
 const LS_RESULTS       = 'bsam_results';
-const LS_EDGE_LINES    = 'bsam_edge_lines';
+const LS_EDGE_LINES     = 'bsam_edge_lines';
+const LS_EDGE_POLYLINES = 'bsam_edge_polylines';
 
 const IDB_DB_NAME    = 'bubble-sheet-auto-mark';
 const IDB_STORE_NAME = 'blobs';
@@ -1623,6 +1657,12 @@ function saveEdgeLines() {
   } catch (_) {}
 }
 
+function saveEdgePolylines() {
+  try {
+    localStorage.setItem(LS_EDGE_POLYLINES, JSON.stringify(refEdgePolylines));
+  } catch (_) {}
+}
+
 function restoreEdgeLines() {
   try {
     const raw = localStorage.getItem(LS_EDGE_LINES);
@@ -1637,6 +1677,32 @@ function restoreEdgeLines() {
       };
       updateApplyCorrectionBtn();
       updateEdgeStatus();
+    }
+  } catch (_) {}
+}
+
+function restoreEdgePolylines() {
+  try {
+    const raw = localStorage.getItem(LS_EDGE_POLYLINES);
+    if (!raw) return;
+    const ep = JSON.parse(raw);
+    if (ep && typeof ep === 'object') {
+      refEdgePolylines = {
+        top:    Array.isArray(ep.top)    ? ep.top    : null,
+        bottom: Array.isArray(ep.bottom) ? ep.bottom : null,
+        left:   Array.isArray(ep.left)   ? ep.left   : null,
+        right:  Array.isArray(ep.right)  ? ep.right  : null,
+      };
+      // If any polylines were saved, restore polyline mode
+      const hasAny = Object.values(refEdgePolylines).some(v => Array.isArray(v) && v.length >= 2);
+      if (hasAny) {
+        polylineMode = true;
+        $('chk-polyline-mode').checked = true;
+        $('btn-poly-clear').style.display = '';
+      }
+      updateApplyCorrectionBtn();
+      updateEdgeStatus();
+      updateEdgeButtonLabels();
     }
   } catch (_) {}
 }
@@ -2432,7 +2498,9 @@ btnRefClear.addEventListener('click', () => {
   refCorrectedImageB64 = null;
   refGridLinesData     = null;
   refEdgeLines  = { top: null, bottom: null, left: null, right: null };
+  refEdgePolylines = { top: null, bottom: null, left: null, right: null };
   edgeDrawMode  = null;
+  polylineDrawEdge = null;
   isEdgeDrawing = false;
   edgeDrawStart   = null;
   edgeDrawCurrent = null;
@@ -2449,6 +2517,7 @@ btnRefClear.addEventListener('click', () => {
   idbDelete(IDB_KEY_REF).catch(() => {});
   saveRegions();
   saveEdgeLines();
+  saveEdgePolylines();
 });
 
 btnDrawAnswer.addEventListener('click', () => setDrawMode(drawMode === 'answer' ? null : 'answer'));
@@ -2463,6 +2532,7 @@ function setDrawMode(mode) {
   isEdgeDrawing   = false;
   edgeDrawStart   = null;
   edgeDrawCurrent = null;
+  polylineDrawEdge = null;
   ['top', 'bottom', 'left', 'right'].forEach(e => {
     const b = $(`btn-edge-${e}`);
     if (b) b.style.fontWeight = '';
@@ -2482,7 +2552,32 @@ function setDrawMode(mode) {
 }
 
 function setEdgeDrawMode(edge) {
-  // Switching to edge-draw mode clears region-draw mode.
+  if (polylineMode) {
+    // Polyline mode: clicking the active edge button again deactivates it.
+    drawMode  = null;
+    isDrawing = false;
+    drawStart   = null;
+    drawCurrent = null;
+    btnDrawAnswer.style.fontWeight = '';
+    btnDrawId.style.fontWeight     = '';
+
+    polylineDrawEdge = (polylineDrawEdge === edge) ? null : edge;
+    refCanvas.className = polylineDrawEdge ? `mode-poly-${polylineDrawEdge}` : '';
+    ['top', 'bottom', 'left', 'right'].forEach(e => {
+      const b = $(`btn-edge-${e}`);
+      if (b) b.style.fontWeight = (e === polylineDrawEdge) ? '700' : '';
+    });
+    if (polylineDrawEdge) {
+      refModeHint.textContent =
+        `Click on the image to add points along the ${polylineDrawEdge} edge. ` +
+        `Click the button again to finish this edge.`;
+    } else {
+      refModeHint.textContent = 'Select an edge button, then click points on the image to trace it.';
+    }
+    return;
+  }
+
+  // Straight-line mode: Switching to edge-draw mode clears region-draw mode.
   drawMode  = null;
   isDrawing = false;
   drawStart   = null;
@@ -2520,7 +2615,22 @@ function getCanvasPos(e) {
 
 function onPointerDown(e) {
   if (!refImageEl) return;
-  if (edgeDrawMode) {
+  if (polylineMode && polylineDrawEdge) {
+    // Polyline mode: each click/tap adds a point to the active edge.
+    const pos = getCanvasPos(e);
+    const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
+    const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
+    const ix = pos.x * scaleX;
+    const iy = pos.y * scaleY;
+    if (!refEdgePolylines[polylineDrawEdge]) refEdgePolylines[polylineDrawEdge] = [];
+    refEdgePolylines[polylineDrawEdge].push([ix, iy]);
+    updateApplyCorrectionBtn();
+    updateEdgeStatus();
+    updateEdgeButtonLabels();
+    saveEdgePolylines();
+    redrawRefCanvas();
+    e.preventDefault();
+  } else if (edgeDrawMode) {
     isEdgeDrawing   = true;
     edgeDrawStart   = getCanvasPos(e);
     edgeDrawCurrent = edgeDrawStart;
@@ -2689,9 +2799,10 @@ function redrawRefCanvas() {
     drawDetectedGridLines(refGridLinesData);
   }
 
-  // ── Edge lines (only at step 0) ───────────────────────────────────────────
+  // ── Edge lines / polylines (only at step 0) ──────────────────────────────
   if (refStep === 0) {
     drawEdgeLines();
+    drawEdgePolylines();
   }
 
   // ── Live drag: region rectangle ───────────────────────────────────────────
@@ -2756,11 +2867,13 @@ function setRefStep(step) {
   redrawRefCanvas();
 }
 
-/** Enable the Apply-Correction button only when all 4 edge lines are drawn. */
+/** Enable the Apply-Correction button when all 4 edge lines OR all 4 polylines are drawn. */
 function updateApplyCorrectionBtn() {
-  const allDrawn = refEdgeLines.top && refEdgeLines.bottom &&
-                   refEdgeLines.left && refEdgeLines.right;
-  btnApplyCorr.disabled = !allDrawn;
+  const allLinesDefined     = refEdgeLines.top && refEdgeLines.bottom &&
+                              refEdgeLines.left && refEdgeLines.right;
+  const allPolysDefined     = ['top', 'bottom', 'left', 'right']
+    .every(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
+  btnApplyCorr.disabled = !allLinesDefined && !allPolysDefined;
 }
 
 /** Enable "Detect Grid Lines" only at step 2 when at least one region is defined. */
@@ -2770,15 +2883,47 @@ function updateDetectGridBtn() {
 
 /** Update the status text below the edge-line buttons. */
 function updateEdgeStatus() {
-  const drawn     = ['top', 'bottom', 'left', 'right'].filter(k => refEdgeLines[k]);
-  const remaining = ['top', 'bottom', 'left', 'right'].filter(k => !refEdgeLines[k]);
-  if (remaining.length === 0) {
-    refEdgeStatus.textContent = '✓ All 4 edge lines defined — click "Apply Distortion Correction".';
-  } else if (drawn.length === 0) {
-    refEdgeStatus.textContent = 'Draw all 4 edge lines on the image, or use Auto-detect.';
+  if (polylineMode) {
+    const polyDrawn   = ['top', 'bottom', 'left', 'right']
+      .filter(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
+    const polyNeeded  = ['top', 'bottom', 'left', 'right']
+      .filter(k => !(Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2));
+    if (polyNeeded.length === 0) {
+      refEdgeStatus.textContent = '✓ All 4 curved edges defined — click "Apply Distortion Correction".';
+    } else if (polyDrawn.length === 0) {
+      refEdgeStatus.textContent = 'Click an edge button, then click points on the image to trace each curved edge.';
+    } else {
+      refEdgeStatus.textContent = `Polylines drawn: ${polyDrawn.join(', ')}. Still needed: ${polyNeeded.join(', ')}.`;
+    }
   } else {
-    refEdgeStatus.textContent = `Drawn: ${drawn.join(', ')}. Still needed: ${remaining.join(', ')}.`;
+    const drawn     = ['top', 'bottom', 'left', 'right'].filter(k => refEdgeLines[k]);
+    const remaining = ['top', 'bottom', 'left', 'right'].filter(k => !refEdgeLines[k]);
+    if (remaining.length === 0) {
+      refEdgeStatus.textContent = '✓ All 4 edge lines defined — click "Apply Distortion Correction".';
+    } else if (drawn.length === 0) {
+      refEdgeStatus.textContent = 'Draw all 4 edge lines on the image, or use Auto-detect.';
+    } else {
+      refEdgeStatus.textContent = `Drawn: ${drawn.join(', ')}. Still needed: ${remaining.join(', ')}.`;
+    }
   }
+}
+
+/** Update edge button labels to show point counts in polyline mode. */
+function updateEdgeButtonLabels() {
+  const icons  = { top: '▲', bottom: '▼', left: '◄', right: '►' };
+  const labels = { top: 'Top', bottom: 'Bottom', left: 'Left', right: 'Right' };
+  ['top', 'bottom', 'left', 'right'].forEach(edge => {
+    const btn = $(`btn-edge-${edge}`);
+    if (!btn) return;
+    if (polylineMode) {
+      const n = Array.isArray(refEdgePolylines[edge]) ? refEdgePolylines[edge].length : 0;
+      btn.textContent = n >= 2
+        ? `${icons[edge]} ${labels[edge]} (${n} pts)`
+        : `${icons[edge]} ${labels[edge]} Edge`;
+    } else {
+      btn.textContent = `${icons[edge]} ${labels[edge]} Edge`;
+    }
+  });
 }
 
 /**
@@ -2869,6 +3014,61 @@ function drawEdgeLines() {
 }
 
 /**
+ * Draw all committed edge polylines onto the canvas.
+ * Each polyline is drawn as a connected set of line segments with filled dots
+ * at each control point.
+ */
+function drawEdgePolylines() {
+  if (!refRawImageEl) return;
+  const sx = refCanvas.width  / refRawImageEl.naturalWidth;
+  const sy = refCanvas.height / refRawImageEl.naturalHeight;
+
+  // Sky-blue colour to distinguish polylines from straight lines.
+  const POLY_COLOR = '#0ea5e9';
+  const DOT_RADIUS = 4;
+
+  refCtx.save();
+  refCtx.strokeStyle = POLY_COLOR;
+  refCtx.fillStyle   = POLY_COLOR;
+  refCtx.lineWidth   = 2;
+  refCtx.setLineDash([]);
+  refCtx.shadowColor = 'rgba(0,0,0,.30)';
+  refCtx.shadowBlur  = 2;
+  refCtx.globalAlpha = 0.9;
+
+  ['top', 'bottom', 'left', 'right'].forEach(key => {
+    const pts = refEdgePolylines[key];
+    if (!pts || pts.length === 0) return;
+
+    // Draw segments
+    refCtx.beginPath();
+    refCtx.moveTo(pts[0][0] * sx, pts[0][1] * sy);
+    for (let i = 1; i < pts.length; i++) {
+      refCtx.lineTo(pts[i][0] * sx, pts[i][1] * sy);
+    }
+    refCtx.stroke();
+
+    // Draw dots at each point
+    pts.forEach(pt => {
+      refCtx.beginPath();
+      refCtx.arc(pt[0] * sx, pt[1] * sy, DOT_RADIUS, 0, 2 * Math.PI);
+      refCtx.fill();
+    });
+
+    // Label near the last point
+    const last = pts[pts.length - 1];
+    refCtx.save();
+    refCtx.shadowBlur = 0;
+    refCtx.fillStyle  = POLY_COLOR;
+    refCtx.font       = 'bold 11px sans-serif';
+    refCtx.fillText(`${key[0].toUpperCase()}(${pts.length})`, last[0] * sx + 6, last[1] * sy - 4);
+    refCtx.restore();
+  });
+
+  refCtx.restore();
+}
+
+/**
  * Draw detected grid lines returned by detect_reference_grid.
  * linesData: {answer_lines_h?, answer_lines_v?, id_lines_h?, id_lines_v?}
  * Positions are in corrected-image pixel coordinates; the canvas may be
@@ -2916,12 +3116,17 @@ async function applyRefCorrection() {
   await new Promise(r => setTimeout(r, 20)); // yield so the label renders
 
   try {
+    // Prefer polylines when all 4 are defined; fall back to straight lines.
+    const allPolysDefined = ['top', 'bottom', 'left', 'right']
+      .every(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
+    const polylinesJson = allPolysDefined ? JSON.stringify(refEdgePolylines) : 'null';
+
     // Collect edge lines (in original image pixel coords)
     const lines = [refEdgeLines.top, refEdgeLines.bottom,
                    refEdgeLines.left, refEdgeLines.right];
-    const edgesJson = lines.every(Boolean) ? JSON.stringify(lines) : 'null';
+    const edgesJson = (!allPolysDefined && lines.every(Boolean)) ? JSON.stringify(lines) : 'null';
 
-    const resultJson = processRefImageFn(rawBytes, edgesJson);
+    const resultJson = processRefImageFn(rawBytes, edgesJson, polylinesJson);
     const result = JSON.parse(resultJson);
     if (!result) return;
 
@@ -3050,12 +3255,49 @@ async function detectRefGrid() {
 });
 
 btnEdgeClear.addEventListener('click', () => {
-  refEdgeLines = { top: null, bottom: null, left: null, right: null };
+  refEdgeLines     = { top: null, bottom: null, left: null, right: null };
+  refEdgePolylines = { top: null, bottom: null, left: null, right: null };
   setEdgeDrawMode(null);
+  polylineDrawEdge = null;
   updateApplyCorrectionBtn();
   updateEdgeStatus();
+  updateEdgeButtonLabels();
   saveEdgeLines();
+  saveEdgePolylines();
   redrawRefCanvas();
+});
+
+$('btn-poly-clear').addEventListener('click', () => {
+  refEdgePolylines = { top: null, bottom: null, left: null, right: null };
+  polylineDrawEdge = null;
+  updateApplyCorrectionBtn();
+  updateEdgeStatus();
+  updateEdgeButtonLabels();
+  saveEdgePolylines();
+  redrawRefCanvas();
+});
+
+$('chk-polyline-mode').addEventListener('change', (e) => {
+  polylineMode = e.target.checked;
+  $('btn-poly-clear').style.display = polylineMode ? '' : 'none';
+  // Cancel any active edge drawing when toggling mode.
+  edgeDrawMode     = null;
+  isEdgeDrawing    = false;
+  edgeDrawStart    = null;
+  edgeDrawCurrent  = null;
+  polylineDrawEdge = null;
+  refCanvas.className = '';
+  ['top', 'bottom', 'left', 'right'].forEach(e => {
+    const b = $(`btn-edge-${e}`);
+    if (b) b.style.fontWeight = '';
+  });
+  updateEdgeStatus();
+  updateEdgeButtonLabels();
+  if (polylineMode) {
+    refModeHint.textContent = 'Select an edge button, then click points on the image to trace it.';
+  } else {
+    refModeHint.textContent = 'Select an edge to draw, then drag a line on the image.';
+  }
 });
 
 btnAutoEdges.addEventListener('click', async () => {
