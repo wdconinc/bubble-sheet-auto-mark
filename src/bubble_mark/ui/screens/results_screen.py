@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 from typing import TYPE_CHECKING
 
 import toga
@@ -18,6 +19,24 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
 
     title = toga.Label("Results", style=Pack(padding_bottom=8, font_size=18))
     status_label = toga.Label("", style=Pack(padding_bottom=6))
+
+    # Show the annotated overlay image for the most recent result, if available.
+    annotated_view = toga.ImageView(style=Pack(padding_bottom=8))
+    _show_annotated = False
+    if app.results and app.results[0].annotated_image is not None:
+        try:
+            import numpy as np
+            from PIL import Image as PILImage
+
+            ann = app.results[0].annotated_image
+            rgb = ann[:, :, ::-1].copy() if ann.ndim == 3 else ann
+            pil = PILImage.fromarray(rgb.astype(np.uint8), mode="RGB")
+            buf = io.BytesIO()
+            pil.save(buf, format="PNG")
+            annotated_view.image = toga.Image(data=buf.getvalue())
+            _show_annotated = True
+        except Exception:
+            pass
 
     table = toga.Table(
         headings=["Student ID", "Answers", "Score"],
@@ -57,5 +76,8 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
         toga.Button("Back", on_press=lambda w: app.go_home(), style=Pack(flex=1)),
     )
 
-    box.add(title, table, status_label, btn_row)
+    if _show_annotated:
+        box.add(title, annotated_view, table, status_label, btn_row)
+    else:
+        box.add(title, table, status_label, btn_row)
     return box
