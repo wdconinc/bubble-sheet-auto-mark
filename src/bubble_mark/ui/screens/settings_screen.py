@@ -211,12 +211,6 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
 
     box.add(
         title,
-        _row("Number of Questions", inp_questions),
-        _row("Number of Choices (A-E=5)", inp_choices),
-        _row("ID Digits", inp_id_digits),
-        _row("Fill Threshold (0-1)", inp_threshold),
-        toga.Label("Answer Key (string of 1-5 or A-E)", style=Pack(padding_bottom=4)),
-        inp_answer_key,
         ref_label,
         ref_hint,
         btn_ref,
@@ -227,6 +221,12 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
         region_hint,
         _row("Answer Region (x1,y1,x2,y2)", inp_answer_region),
         _row("ID Region (x1,y1,x2,y2)", inp_id_region),
+        _row("Number of Questions", inp_questions),
+        _row("Number of Choices (A-E=5)", inp_choices),
+        _row("ID Digits", inp_id_digits),
+        _row("Fill Threshold (0-1)", inp_threshold),
+        toga.Label("Answer Key (string of 1-5 or A-E)", style=Pack(padding_bottom=4)),
+        inp_answer_key,
         status_label,
         btn_row,
     )
