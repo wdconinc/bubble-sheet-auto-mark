@@ -86,8 +86,8 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
                     title="Select blank bubble sheet",
                     file_types=["jpg", "jpeg", "png", "bmp"],
                 )
-            except Exception as exc:
-                logger.exception("File dialog raised an unexpected error: %s", exc)
+            except Exception:
+                logger.exception("File dialog raised an unexpected error.")
                 status_label.text = "Error opening file dialog."
                 return
             if result is not None:

@@ -6,6 +6,7 @@ from typing import Optional
 
 import numpy as np
 
+from bubble_mark.models.settings import _validate_region
 from bubble_mark.processing.image_utils import (
     find_page_contour,
     perspective_transform,
@@ -54,8 +55,6 @@ class BubbleSheetDetector:
         answer_region: Optional[list] = None,
         id_region: Optional[list] = None,
     ) -> None:
-        from bubble_mark.models.settings import _validate_region
-
         self.layout_config: dict = {**self.DEFAULT_LAYOUT, **(layout_config or {})}
         self.answer_region: Optional[list] = _validate_region(answer_region)
         self.id_region: Optional[list] = _validate_region(id_region)
