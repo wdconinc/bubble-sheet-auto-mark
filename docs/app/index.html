@@ -347,7 +347,7 @@
     }
     .edge-coord-row.has-line { display: flex; }
     .edge-coord-label {
-      width: 3.2em; font-weight: 600; color: #7c3aed; flex-shrink: 0;
+      width: 4em; font-weight: 600; color: #7c3aed; flex-shrink: 0;
     }
     .edge-coord-input {
       width: 5em; padding: 2px 4px; border: 1px solid var(--border);
@@ -518,7 +518,7 @@
             <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
             <div id="edge-coords-panel">
               <div id="edge-coord-row-top"    class="edge-coord-row"><span class="edge-coord-label">Top</span>    <input type="number" class="edge-coord-input" id="ec-top-x1"    step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y1"    step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-top-x2"    step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y2"    step="1" title="y2"></div>
-              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bot</span>   <input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2"></div>
+              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bottom</span><input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2"></div>
               <div id="edge-coord-row-left"   class="edge-coord-row"><span class="edge-coord-label">Left</span>  <input type="number" class="edge-coord-input" id="ec-left-x1"   step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y1"   step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-left-x2"   step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y2"   step="1" title="y2"></div>
               <div id="edge-coord-row-right"  class="edge-coord-row"><span class="edge-coord-label">Right</span> <input type="number" class="edge-coord-input" id="ec-right-x1"  step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y1"  step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-right-x2"  step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y2"  step="1" title="y2"></div>
             </div>
@@ -1085,6 +1085,7 @@ let refGridLinesData    = null;  // {answer_lines_h, answer_lines_v, id_lines_h,
 
 // Edge-line drawing state
 // refEdgeLines values are [x1,y1,x2,y2] in ORIGINAL IMAGE pixel coordinates
+const EDGE_NAMES = ['top', 'bottom', 'left', 'right'];
 let refEdgeLines  = { top: null, bottom: null, left: null, right: null };
 let edgeDrawMode  = null;     // 'top'|'bottom'|'left'|'right'|null
 let isEdgeDrawing = false;
@@ -1158,7 +1159,7 @@ const btnDetectGrid    = $('btn-detect-grid');
 
 // Edge-line coordinate input elements (keyed by edge name then coord index 0-3)
 const edgeCoordInputs = {};
-['top', 'bottom', 'left', 'right'].forEach(edge => {
+EDGE_NAMES.forEach(edge => {
   edgeCoordInputs[edge] = ['x1', 'y1', 'x2', 'y2'].map(c => $(`ec-${edge}-${c}`));
 });
 
@@ -2518,7 +2519,7 @@ function setDrawMode(mode) {
   isEdgeDrawing   = false;
   edgeDrawStart   = null;
   edgeDrawCurrent = null;
-  ['top', 'bottom', 'left', 'right'].forEach(e => {
+  EDGE_NAMES.forEach(e => {
     const b = $(`btn-edge-${e}`);
     if (b) b.style.fontWeight = '';
   });
@@ -2547,7 +2548,7 @@ function setEdgeDrawMode(edge) {
 
   edgeDrawMode = edge;
   refCanvas.className = edge ? `mode-edge-${edge}` : '';
-  ['top', 'bottom', 'left', 'right'].forEach(e => {
+  EDGE_NAMES.forEach(e => {
     const b = $(`btn-edge-${e}`);
     if (b) b.style.fontWeight = (e === edge) ? '700' : '';
   });
@@ -2826,8 +2827,8 @@ function updateDetectGridBtn() {
 
 /** Update the status text below the edge-line buttons. */
 function updateEdgeStatus() {
-  const drawn     = ['top', 'bottom', 'left', 'right'].filter(k => refEdgeLines[k]);
-  const remaining = ['top', 'bottom', 'left', 'right'].filter(k => !refEdgeLines[k]);
+  const drawn     = EDGE_NAMES.filter(k => refEdgeLines[k]);
+  const remaining = EDGE_NAMES.filter(k => !refEdgeLines[k]);
   if (remaining.length === 0) {
     refEdgeStatus.textContent = '✓ All 4 edge lines defined — click "Apply Distortion Correction".';
   } else if (drawn.length === 0) {
@@ -2848,6 +2849,8 @@ function updateEdgeInputs(edge) {
   if (!row || !inputs) return;
   if (ln) {
     row.classList.add('has-line');
+    // Display coordinates rounded to integers (sub-pixel precision is not
+    // meaningful for alignment), without mutating the source array.
     inputs.forEach((inp, i) => { inp.value = Math.round(ln[i]); });
   } else {
     row.classList.remove('has-line');
@@ -2857,7 +2860,7 @@ function updateEdgeInputs(edge) {
 
 /** Refresh all four edge-line coordinate input rows. */
 function updateAllEdgeInputs() {
-  ['top', 'bottom', 'left', 'right'].forEach(updateEdgeInputs);
+  EDGE_NAMES.forEach(updateEdgeInputs);
 }
 
 /**
@@ -2905,7 +2908,7 @@ function drawEdgeLines() {
   refCtx.shadowColor = 'rgba(0,0,0,.35)';
   refCtx.shadowBlur  = 3;
 
-  ['top', 'bottom', 'left', 'right'].forEach(key => {
+  EDGE_NAMES.forEach(key => {
     const ln = refEdgeLines[key];
     if (!ln) return;
     const ext = extendLineToCanvas(ln[0] * sx, ln[1] * sy, ln[2] * sx, ln[3] * sy,
@@ -3121,7 +3124,7 @@ async function detectRefGrid() {
 
 // ── Edge-line button event handlers ──────────────────────────────────────────
 
-['top', 'bottom', 'left', 'right'].forEach(edge => {
+EDGE_NAMES.forEach(edge => {
   const btn = $(`btn-edge-${edge}`);
   if (!btn) return;
   btn.addEventListener('click', () =>
@@ -3176,13 +3179,13 @@ btnDetectGrid.addEventListener('click',   () => detectRefGrid());
 
 // ── Coordinate input event handlers ──────────────────────────────────────────
 
-['top', 'bottom', 'left', 'right'].forEach(edge => {
+EDGE_NAMES.forEach(edge => {
   edgeCoordInputs[edge].forEach((inp, i) => {
     if (!inp) return;
     inp.addEventListener('change', () => {
       const ln = refEdgeLines[edge];
       if (!ln) return;
-      const val = parseFloat(inp.value);
+      const val = Math.round(parseFloat(inp.value));
       if (!Number.isFinite(val)) return;
       ln[i] = val;
       updateApplyCorrectionBtn();
