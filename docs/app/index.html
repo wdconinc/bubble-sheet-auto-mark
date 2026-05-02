@@ -247,8 +247,8 @@
     #preview-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
 
     /* ── Camera ── */
-    #camera-section { margin-top: 12px; display: none; }
-    #camera-video {
+    #camera-section, #ref-camera-section { margin-top: 12px; display: none; }
+    #camera-video, #ref-camera-video {
       width: 100%; max-height: 380px;
       background: #000; border-radius: var(--radius); display: block;
     }
@@ -299,6 +299,13 @@
     .good { color: var(--success); font-weight: 600; }
     .bad  { color: var(--danger);  font-weight: 600; }
     #no-results-msg { text-align: center; padding: 28px; color: var(--muted); font-size: .9rem; }
+    .btn-view-image {
+      background: none; border: none; cursor: pointer;
+      font-size: 1rem; padding: 0 4px; line-height: 1;
+      color: var(--primary); opacity: .8;
+    }
+    .btn-view-image:hover { opacity: 1; }
+    td.view-col { text-align: center; padding: 4px 6px; width: 32px; }
 
     /* ── Footer ── */
     footer {
@@ -462,8 +469,21 @@
         <div class="btn-row">
           <button class="btn-ghost" id="btn-ref-upload" type="button">📄 Upload Blank Sheet</button>
           <input type="file" id="ref-file-input" accept="image/*" hidden>
+          <button class="btn-ghost" id="btn-ref-camera" type="button">📷 Use Camera</button>
           <button class="btn-ghost" id="btn-ref-clear" type="button" style="display:none">🗑 Clear Regions</button>
         </div>
+
+        <!-- Reference-sheet camera viewfinder -->
+        <div id="ref-camera-section">
+          <div style="position: relative;">
+            <video id="ref-camera-video" autoplay playsinline muted></video>
+          </div>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn-primary" id="btn-ref-capture">📸 Capture Frame</button>
+            <button class="btn-ghost" id="btn-ref-stop-camera">⏹ Stop Camera</button>
+          </div>
+        </div>
+
         <div id="ref-canvas-section" style="display:none">
 
           <!-- ── Step 1: Define page edges ── -->
@@ -542,6 +562,7 @@
         <button class="btn-primary" id="btn-upload" disabled>📁 Upload Images</button>
         <input type="file" id="file-input" accept="image/*" multiple hidden>
         <button class="btn-ghost" id="btn-camera" disabled>📷 Use Camera</button>
+        <button class="btn-danger" id="btn-clear-images" disabled>🗑 Clear Images</button>
         <button class="btn-success" id="btn-grade" disabled>▶ Grade Sheets</button>
       </div>
 
@@ -549,7 +570,7 @@
       <div id="camera-section">
         <div id="live-overlay-badge">
           <span class="live-badge"><span class="live-dot"></span> LIVE</span>
-          &nbsp;Green outline = page detected
+          &nbsp;Green outline = page detected · Gold = auto-capture armed
         </div>
         <div style="position: relative;">
           <video id="camera-video" autoplay playsinline muted></video>
@@ -558,6 +579,10 @@
         <div class="btn-row" style="margin-top:8px">
           <button class="btn-primary" id="btn-capture">📸 Capture Frame</button>
           <button class="btn-ghost" id="btn-stop-camera">⏹ Stop Camera</button>
+          <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:.875rem;color:var(--text)" title="Automatically capture when a sheet is detected and the camera is held still">
+            <input type="checkbox" id="chk-auto-capture" style="width:15px;height:15px;cursor:pointer;accent-color:var(--success)">
+            Auto-capture
+          </label>
         </div>
       </div>
 
@@ -610,6 +635,7 @@
               <th data-col="answers" tabindex="0" aria-sort="none">Answers<span class="sort-indicator">↕</span></th>
               <th data-col="score" tabindex="0" aria-sort="none">Score<span class="sort-indicator">↕</span></th>
               <th data-col="num_correct" tabindex="0" aria-sort="none">Correct / Total<span class="sort-indicator">↕</span></th>
+              <th id="th-view-image" hidden scope="col"><span aria-hidden="true">🖼</span> View image</th>
             </tr>
           </thead>
           <tbody id="results-tbody"></tbody>
@@ -1007,6 +1033,7 @@ let activeSheetIdx = -1;     // index of the currently shown graded sheet tab
 let cameraStream   = null;
 let captureCounter = 0;   // monotonically increments with each capture; used for unique filenames
 let captureSession = 0;   // incremented when camera stops; invalidates in-flight capture callbacks
+let refCameraStream = null;  // MediaStream for the reference-sheet camera
 
 // Fixed layout constant (matches id_choices_per_digit in the Python pipeline)
 const ID_CHOICES_PER_DIGIT = 10;
@@ -1052,6 +1079,7 @@ const btnCamera      = $('btn-camera');
 const btnGrade       = $('btn-grade');
 const btnCapture     = $('btn-capture');
 const btnStopCam     = $('btn-stop-camera');
+const chkAutoCapture = $('chk-auto-capture');
 const cameraSection  = $('camera-section');
 const cameraVideo    = $('camera-video');
 const cameraOverlay  = $('camera-overlay');
@@ -1064,13 +1092,20 @@ const resultCount    = $('result-count');
 const noResultsMsg   = $('no-results-msg');
 const resultsTable   = $('results-table');
 const resultsTbody   = $('results-tbody');
+const thViewImage    = $('th-view-image');
 const btnCsv         = $('btn-csv');
 const btnClear       = $('btn-clear');
+const btnClearImages = $('btn-clear-images');
 
 // Reference-sheet elements
 const btnRefUpload    = $('btn-ref-upload');
 const refFileInput    = $('ref-file-input');
+const btnRefCamera    = $('btn-ref-camera');
 const btnRefClear     = $('btn-ref-clear');
+const refCameraSection = $('ref-camera-section');
+const refCameraVideo  = $('ref-camera-video');
+const btnRefCapture   = $('btn-ref-capture');
+const btnRefStopCam   = $('btn-ref-stop-camera');
 const refCanvasSection = $('ref-canvas-section');
 const refCanvas       = $('ref-canvas');
 const refCtx          = refCanvas.getContext('2d');
@@ -1300,6 +1335,7 @@ function addImageFiles(fileList) {
 
     updatePendingInfo();
     btnGrade.disabled = !gradeSheetFn;
+    btnClearImages.disabled = false;
     setStatus(
       loaded.length === 1
         ? 'Image loaded — click "Grade Sheets" to process.'
@@ -1327,6 +1363,20 @@ fileInput.addEventListener('change', (e) => {
   stopCamera();
   addImageFiles(e.target.files);
   fileInput.value = '';
+});
+
+btnClearImages.addEventListener('click', () => {
+  pendingFiles = [];
+  btnGrade.disabled = true;
+  btnClearImages.disabled = true;
+  previewCanvas.width  = 0;
+  previewCanvas.height = 0;
+  previewCanvas.style.display = 'none';
+  previewHint.style.display   = '';
+  previewArea.classList.remove('has-image');
+  pendingInfo.hidden = true;
+  idbDelete(IDB_KEY_PENDING).catch(() => {});
+  setStatus('', '');
 });
 
 // ── Camera ───────────────────────────────────────────────────────────────────
@@ -1404,6 +1454,7 @@ btnCapture.addEventListener('click', () => {
       previewArea.style.display = '';
       updatePendingInfo();
       btnGrade.disabled = !gradeSheetFn;
+      btnClearImages.disabled = false;
       const count = pendingFiles.length;
       setStatus(
         count === 1
@@ -1420,6 +1471,16 @@ btnCapture.addEventListener('click', () => {
 });
 
 btnStopCam.addEventListener('click', stopCamera);
+
+chkAutoCapture.addEventListener('change', () => {
+  autoCaptureEnabled       = chkAutoCapture.checked;
+  autoCaptureStableCount   = 0;
+  autoCapturePrevData      = null;
+  autoCaptureCooldownUntil = 0;
+  if (autoCaptureEnabled) {
+    setStatus('Auto-capture on — hold the camera still over a sheet.', 'info');
+  }
+});
 
 function stopCamera() {
   captureSession++;  // invalidate any in-flight capture callbacks
@@ -1448,7 +1509,20 @@ let overlaySession  = 0;      // incremented on start/stop to invalidate stale c
 let liveCanvasW     = 0;      // cached overlay canvas dimensions
 let liveCanvasH     = 0;
 let liveCtx         = null;   // cached 2D rendering context for #camera-overlay
+
+// Auto-capture state
+let autoCaptureEnabled      = false;
+let autoCapturePrevData     = null;   // Uint8ClampedArray thumbnail of the previous analysis frame
+let autoCaptureStableCount  = 0;      // consecutive stable+contour detections so far
+let autoCaptureCooldownUntil = 0;     // performance.now() value until which auto-capture is suppressed
 const OVERLAY_INTERVAL_MS = 900;  // minimum ms between contour-detection calls
+
+// Auto-capture: trigger when a sheet is detected and the frame is stable.
+const AUTO_CAPTURE_MAD_THRESHOLD   = 10;   // mean abs pixel diff per channel (0–255); ~4% change triggers reset
+const AUTO_CAPTURE_STABLE_REQUIRED = 2;    // consecutive stable+contour detections needed to fire
+const AUTO_CAPTURE_COOLDOWN_MS     = 2500; // ms to wait between consecutive auto-captures
+const AUTO_CAPTURE_THUMB_W         = 160;  // thumbnail width  used for motion comparison
+const AUTO_CAPTURE_THUMB_H         = 90;   // thumbnail height used for motion comparison
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 // Settings, regions, and results are stored in localStorage.
@@ -1646,10 +1720,11 @@ async function restorePendingImage() {
         previewCanvas.style.display = 'block';
         previewHint.style.display   = 'none';
         previewArea.classList.add('has-image');
+        btnClearImages.disabled = false;
         URL.revokeObjectURL(url);
         resolve();
       };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      img.onerror = () => { btnClearImages.disabled = false; URL.revokeObjectURL(url); resolve(); };
       img.src = url;
     });
   } catch (_) {}
@@ -1658,8 +1733,11 @@ async function restorePendingImage() {
 function startLiveOverlay() {
   if (liveLoopId !== null) return;
   overlaySession++;
-  liveLoopBusy = false;
-  liveContour  = null;
+  liveLoopBusy              = false;
+  liveContour               = null;
+  autoCaptureStableCount    = 0;
+  autoCapturePrevData       = null;
+  autoCaptureCooldownUntil  = 0;
   liveCanvasW  = 0;   // force dimension sync on first tick
   liveCanvasH  = 0;
   liveCtx      = null;
@@ -1683,6 +1761,38 @@ function stopLiveOverlay() {
   liveOverlayBadge.style.display = 'none';
 }
 
+// Persistent offscreen canvas/context reused by computeMotionMad to avoid
+// per-cycle allocation and GC pressure.
+let _motionThumbCanvas = null;
+let _motionThumbCtx    = null;
+
+/**
+ * Downsample srcCanvas to a small thumbnail, compare it against the previous
+ * thumbnail, and return the mean absolute pixel difference per channel (0–255).
+ * Returns null on the first call (no previous frame to compare).
+ * Side-effect: updates autoCapturePrevData for the next call.
+ */
+function computeMotionMad(srcCanvas) {
+  if (!_motionThumbCanvas) {
+    _motionThumbCanvas = document.createElement('canvas');
+    _motionThumbCanvas.width  = AUTO_CAPTURE_THUMB_W;
+    _motionThumbCanvas.height = AUTO_CAPTURE_THUMB_H;
+    _motionThumbCtx = _motionThumbCanvas.getContext('2d');
+  }
+  _motionThumbCtx.drawImage(srcCanvas, 0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H);
+  const data = _motionThumbCtx.getImageData(0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H).data;
+  const prev = autoCapturePrevData;
+  autoCapturePrevData = data;
+  if (prev === null) return null;
+  let sum = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    sum += Math.abs(data[i]   - prev[i])
+         + Math.abs(data[i+1] - prev[i+1])
+         + Math.abs(data[i+2] - prev[i+2]);
+  }
+  return sum / (data.length / 4) / 3;
+}
+
 function liveOverlayTick(now) {
   if (!cameraStream) { stopLiveOverlay(); return; }
   liveLoopId = requestAnimationFrame(liveOverlayTick);
@@ -1703,7 +1813,9 @@ function liveOverlayTick(now) {
 
   // Redraw each frame: clear then paint the cached contour (if any).
   liveCtx.clearRect(0, 0, w, h);
-  if (liveContour) drawContourOverlay(liveCtx, liveContour);
+  // Outline turns gold when auto-capture is armed and a sheet is being held steady.
+  const overlayColor = (autoCaptureEnabled && autoCaptureStableCount > 0) ? '#ffd700' : '#00ff00';
+  if (liveContour) drawContourOverlay(liveCtx, liveContour, overlayColor);
 
   // Throttle the expensive Python call.
   if (liveLoopBusy || now - lastOverlayMs < OVERLAY_INTERVAL_MS) return;
@@ -1714,6 +1826,9 @@ function liveOverlayTick(now) {
   const cap = document.createElement('canvas');
   cap.width = w; cap.height = h;
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
+  // Motion MAD computed synchronously from raw pixels before the async toBlob
+  // gap, so the result is ready inside the callback without extra canvas work.
+  const motionMad = autoCaptureEnabled ? computeMotionMad(cap) : null;
   const mySession = overlaySession;  // snapshot before the async gap
   cap.toBlob(async (blob) => {
     // Bail out if the camera was stopped or a new session started while waiting.
@@ -1727,6 +1842,23 @@ function liveOverlayTick(now) {
       const result = JSON.parse(detectContourFn(bytes));
       if (mySession !== overlaySession) { liveLoopBusy = false; return; }
       liveContour = result !== null ? result.contour : null;
+
+      // Auto-capture: fire when a sheet contour is present and the image has
+      // been stable (low motion) for AUTO_CAPTURE_STABLE_REQUIRED cycles.
+      if (autoCaptureEnabled && performance.now() > autoCaptureCooldownUntil) {
+        const isStable = motionMad !== null && motionMad < AUTO_CAPTURE_MAD_THRESHOLD;
+        if (liveContour !== null && isStable) {
+          autoCaptureStableCount++;
+          if (autoCaptureStableCount >= AUTO_CAPTURE_STABLE_REQUIRED) {
+            autoCaptureCooldownUntil = performance.now() + AUTO_CAPTURE_COOLDOWN_MS;
+            autoCaptureStableCount   = 0;
+            autoCapturePrevData      = null; // reset so cooldown period isn't counted
+            btnCapture.click();
+          }
+        } else {
+          autoCaptureStableCount = 0;
+        }
+      }
     } catch (e) {
       console.warn('Live overlay error:', e);
     } finally {
@@ -1735,10 +1867,10 @@ function liveOverlayTick(now) {
   }, 'image/jpeg', 0.7);
 }
 
-function drawContourOverlay(ctx, pts) {
+function drawContourOverlay(ctx, pts, color = '#00ff00') {
   if (!pts || pts.length !== 4) return;
   ctx.save();
-  ctx.strokeStyle = '#00ff00';
+  ctx.strokeStyle = color;
   // Scale line width with image resolution: ~4 px at 1280-wide frames.
   ctx.lineWidth   = Math.max(3, Math.round(ctx.canvas.width / 300));
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
@@ -1779,6 +1911,7 @@ btnGrade.addEventListener('click', async () => {
   if (!pendingFiles.length || !gradeSheetFn) return;
 
   btnGrade.disabled = true;
+  btnClearImages.disabled = true;
   gradedSheets = [];
   activeSheetIdx = -1;
 
@@ -1850,6 +1983,7 @@ btnGrade.addEventListener('click', async () => {
   }
 
   btnGrade.disabled = false;
+  btnClearImages.disabled = false;
 });
 
 // ── Graded-sheet tabs ─────────────────────────────────────────────────────────
@@ -2028,7 +2162,18 @@ btnRegrade.addEventListener('click', async () => {
 
 // ── Results ──────────────────────────────────────────────────────────────────
 
-function appendResultRow(r, idx) {
+/**
+ * Scroll to the Grade Images card, make the graded-tabs section visible,
+ * and activate the specified graded-sheet tab.
+ */
+function navigateToGradedSheet(gradedIdx) {
+  if (gradedIdx < 0 || gradedIdx >= gradedSheets.length) return;
+  gradedTabsSection.hidden = false;
+  gradedTabsSection.closest('.card').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  activateTab(gradedIdx);
+}
+
+function appendResultRow(r, idx, hasImages) {
   const scored = r.score != null;
   const scoreTxt = scored ? `${(r.score * 100).toFixed(1)} %` : '–';
   const scoreCls = scored ? (r.score >= 0.6 ? 'good' : 'bad') : '';
@@ -2038,6 +2183,9 @@ function appendResultRow(r, idx) {
   const ans = r.answers || '';
   const ansDisplay = ans.length > 35 ? ans.slice(0, 35) + '…' : ans;
 
+  // Find the corresponding gradedSheets entry (if images are still in memory).
+  const gradedIdx = gradedSheets.findIndex((s) => s.resultIdx === idx - 1);
+
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td>${idx}</td>
@@ -2045,12 +2193,28 @@ function appendResultRow(r, idx) {
     <td class="mono" title="${escHtml(ans)}">${escHtml(ansDisplay)}</td>
     <td class="${scoreCls}">${scoreTxt}</td>
     <td>${correctTxt}</td>
+    ${hasImages ? '<td class="view-col"></td>' : ''}
   `;
+
+  if (gradedIdx >= 0) {
+    const btn = document.createElement('button');
+    btn.className  = 'btn-view-image';
+    btn.type       = 'button';
+    btn.title      = `View image for sheet ${idx}`;
+    btn.setAttribute('aria-label', `View image for sheet ${idx}`);
+    btn.textContent = '🔍';
+    btn.addEventListener('click', () => navigateToGradedSheet(gradedIdx));
+    tr.lastElementChild.appendChild(btn);
+  }
+
   resultsTbody.appendChild(tr);
 }
 
 function renderResultsTable() {
   resultsTbody.innerHTML = '';
+
+  const hasImages = gradedSheets.length > 0;
+  thViewImage.hidden = !hasImages;
 
   // Build a sorted index array based on current sortCol / sortDir.
   const indices = results.map((_, i) => i);
@@ -2069,7 +2233,7 @@ function renderResultsTable() {
     });
   }
 
-  indices.forEach((origIdx) => appendResultRow(results[origIdx], origIdx + 1));
+  indices.forEach((origIdx) => appendResultRow(results[origIdx], origIdx + 1, hasImages));
 
   // Update header sort indicators and aria-sort.
   resultsTable.querySelectorAll('th[data-col]').forEach((th) => {
@@ -2178,7 +2342,89 @@ refFileInput.addEventListener('change', (e) => {
   img.src = url;
 });
 
+// ── Reference-sheet camera ────────────────────────────────────────────────────
+
+btnRefCamera.addEventListener('click', async () => {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setStatus(
+      'Camera API not available. Use file upload, or ensure the page is served over HTTPS.',
+      'error'
+    );
+    return;
+  }
+  try {
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
+    });
+    stopRefCamera();
+    refCameraStream = newStream;
+    refCameraVideo.srcObject = refCameraStream;
+    refCameraSection.style.display = 'block';
+    setStatus('Point the camera at the blank bubble sheet and tap "Capture Frame".', 'info');
+  } catch (err) {
+    const msg = err.name === 'NotAllowedError'
+      ? 'Camera permission denied. Please allow camera access and try again.'
+      : `Camera error: ${err.message}`;
+    setStatus(msg, 'error');
+  }
+});
+
+btnRefCapture.addEventListener('click', () => {
+  if (!refCameraStream) return;
+  const w = refCameraVideo.videoWidth;
+  const h = refCameraVideo.videoHeight;
+  if (!w || !h) {
+    setStatus('Camera frame not ready. Wait a moment and try again.', 'error');
+    return;
+  }
+  const cap = document.createElement('canvas');
+  cap.width  = w;
+  cap.height = h;
+  cap.getContext('2d').drawImage(refCameraVideo, 0, 0);
+  cap.toBlob((blob) => {
+    if (!blob) { setStatus('Failed to capture frame. Please try again.', 'error'); return; }
+    stopRefCamera();
+    blob.arrayBuffer().then((buf) => {
+      const bytes = new Uint8Array(buf);
+      idbPut(IDB_KEY_REF, bytes).catch(() => {});
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        refCorrectedImageEl  = null;
+        refEnhancedImageEl   = null;
+        refCorrectedImageB64 = null;
+        refGridLinesData     = null;
+        refRawImageEl = img;
+        refCanvasSection.style.display = 'block';
+        btnRefClear.style.display = 'inline-flex';
+        setRefStep(0);
+        URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        setStatus('Failed to load captured frame as an image. Please try again.', 'error');
+      };
+      img.src = url;
+    }).catch((err) => {
+      console.error('Ref capture arrayBuffer error:', err);
+      setStatus('Failed to read captured frame. Please try again.', 'error');
+    });
+  }, 'image/jpeg', 0.92);
+});
+
+btnRefStopCam.addEventListener('click', stopRefCamera);
+
+function stopRefCamera() {
+  if (refCameraStream) {
+    refCameraStream.getTracks().forEach((t) => t.stop());
+    refCameraStream = null;
+  }
+  refCameraVideo.srcObject = null;
+  refCameraSection.style.display = 'none';
+}
+
 btnRefClear.addEventListener('click', () => {
+  stopRefCamera();
   refImageEl           = null;
   refRawImageEl        = null;
   refCorrectedImageEl  = null;
