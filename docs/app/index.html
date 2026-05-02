@@ -1373,7 +1373,7 @@ async function restorePendingImage() {
         URL.revokeObjectURL(url);
         resolve();
       };
-      img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      img.onerror = () => { btnClearImages.disabled = false; URL.revokeObjectURL(url); resolve(); };
       img.src = url;
     });
   } catch (_) {}
@@ -1503,6 +1503,7 @@ btnGrade.addEventListener('click', async () => {
   if (!pendingFiles.length || !gradeSheetFn) return;
 
   btnGrade.disabled = true;
+  btnClearImages.disabled = true;
   gradedSheets = [];
   activeSheetIdx = -1;
 
@@ -1574,6 +1575,7 @@ btnGrade.addEventListener('click', async () => {
   }
 
   btnGrade.disabled = false;
+  btnClearImages.disabled = false;
 });
 
 // ── Graded-sheet tabs ─────────────────────────────────────────────────────────
