@@ -4,9 +4,17 @@ from __future__ import annotations
 
 import logging
 
-import toga
-from toga.style import Pack
-from toga.style.pack import COLUMN
+try:
+    import toga
+    from toga.style import Pack
+    from toga.style.pack import COLUMN
+except ModuleNotFoundError as exc:
+    if exc.name != "toga":
+        raise
+    raise ModuleNotFoundError(
+        "The 'toga' package is required to run the GUI. "
+        "Install it with: pip install 'bubble-sheet-auto-mark[toga]'"
+    ) from exc
 
 from bubble_mark.models.answer_key import AnswerKey
 from bubble_mark.models.grade_result import GradeResult
