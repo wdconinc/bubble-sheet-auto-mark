@@ -1,10 +1,9 @@
 """Tests for bubble_mark.processing.grader."""
+
 from __future__ import annotations
 
-import numpy as np
 import pytest
 
-from bubble_mark.models.answer_key import AnswerKey
 from bubble_mark.models.grade_result import GradeResult
 from bubble_mark.processing.analyzer import BubbleAnalyzer
 from bubble_mark.processing.detector import BubbleSheetDetector

@@ -8,6 +8,7 @@ pipeline.
 On desktop the "Open Camera" button falls back to a file-import dialog so the
 rest of the workflow can be exercised without camera hardware.
 """
+
 from __future__ import annotations
 
 import io
@@ -49,6 +50,7 @@ def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
 
     try:
         import cv2 as _cv2
+
         _have_cv2_local = True
     except ImportError:
         _have_cv2_local = False
@@ -61,6 +63,7 @@ def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
 
     try:
         from bubble_mark.processing.image_utils import find_page_contour
+
         bgr = rgb[:, :, ::-1].copy()  # RGB → BGR (pure numpy, no cv2 needed)
         contour = find_page_contour(bgr)
         if contour is None:
@@ -70,14 +73,25 @@ def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
             _cv2.drawContours(bgr, [contour], -1, (0, 255, 0), 3)
             return bgr[:, :, ::-1].copy()  # BGR → RGB
         # Pillow fallback: draw the 4-sided polygon on the RGB image.
-        from PIL import Image as PILImage, ImageDraw
+        from PIL import Image as PILImage
+        from PIL import ImageDraw
+
         pts = contour.reshape(4, 2)
         poly = [(int(x), int(y)) for x, y in pts]
         pil = PILImage.fromarray(rgb.copy())
         draw = ImageDraw.Draw(pil)
         draw.polygon(poly, outline=(0, 255, 0))
         # Draw a thicker border by drawing multiple times with slight offsets.
-        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1), (-2, 0), (2, 0), (0, -2), (0, 2)]:
+        for dx, dy in [
+            (-1, 0),
+            (1, 0),
+            (0, -1),
+            (0, 1),
+            (-2, 0),
+            (2, 0),
+            (0, -2),
+            (0, 2),
+        ]:
             shifted = [(x + dx, y + dy) for x, y in poly]
             draw.polygon(shifted, outline=(0, 255, 0))
         result = np.array(pil)
@@ -90,6 +104,7 @@ def _draw_overlay(rgb: np.ndarray) -> np.ndarray:
 def _numpy_to_toga_image(rgb: np.ndarray) -> toga.Image:
     """Convert an HxWx3 uint8 RGB array to a ``toga.Image``."""
     from PIL import Image as PILImage
+
     pil = PILImage.fromarray(rgb, mode="RGB")
     buf = io.BytesIO()
     pil.save(buf, format="PNG")
@@ -137,12 +152,14 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
     def open_camera(widget: toga.Widget) -> None:
         if _is_android():
             from bubble_mark.ui.camerax_bridge import start_camera
+
             status_label.text = "Starting camera…"
             logger.info("Opening camera (Android CameraX).")
             started = start_camera(_on_frame)
             if not started:
                 status_label.text = (
-                    "Camera permission requested. Please grant it and tap 'Open Camera' again."
+                    "Camera permission requested. "
+                    "Please grant it and tap 'Open Camera' again."
                 )
         else:
             logger.info("Desktop: opening file-import dialog.")
@@ -165,10 +182,13 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
                 return
             try:
                 from PIL import Image as PILImage
+
                 with PILImage.open(str(result)) as img:
                     pil = img.convert("RGB")
                 rgb = np.array(pil, dtype=np.uint8)
-                logger.info("Loaded image: %s (%dx%d)", result.name, rgb.shape[1], rgb.shape[0])
+                logger.info(
+                    "Loaded image: %s (%dx%d)", result.name, rgb.shape[1], rgb.shape[0]
+                )
                 _on_frame(rgb)
                 status_label.text = f"Loaded: {result.name}"
             except Exception as exc:
@@ -176,6 +196,7 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
                 status_label.text = f"Error loading image: {exc}"
 
         import asyncio
+
         asyncio.ensure_future(_pick())
 
     def capture(widget: toga.Widget) -> None:
@@ -222,6 +243,7 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
             # Stop the camera before navigating away so the CameraX session
             # is not left running against a discarded screen.
             from bubble_mark.ui.camerax_bridge import stop_camera as _stop
+
             _stop()
             app.go_results()
         except Exception as exc:
@@ -230,6 +252,7 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
 
     def stop_camera(widget: toga.Widget) -> None:
         from bubble_mark.ui.camerax_bridge import stop_camera as _stop
+
         _stop()
         logger.info("Camera stopped by user.")
         status_label.text = "Camera stopped."

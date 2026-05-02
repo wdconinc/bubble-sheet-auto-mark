@@ -1,10 +1,9 @@
 """Tests for bubble_mark.models.answer_key."""
+
 from __future__ import annotations
 
-import json
 import csv
-
-import pytest
+import json
 
 from bubble_mark.models.answer_key import AnswerKey
 

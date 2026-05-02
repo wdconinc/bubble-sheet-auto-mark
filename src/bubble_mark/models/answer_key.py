@@ -1,14 +1,21 @@
 """AnswerKey model: stores and validates the correct answers for a test."""
+
 from __future__ import annotations
 
 import csv
 import json
-from typing import ClassVar
-
 
 _LETTER_TO_DIGIT: dict[str, str] = {
-    "A": "1", "B": "2", "C": "3", "D": "4", "E": "5",
-    "a": "1", "b": "2", "c": "3", "d": "4", "e": "5",
+    "A": "1",
+    "B": "2",
+    "C": "3",
+    "D": "4",
+    "E": "5",
+    "a": "1",
+    "b": "2",
+    "c": "3",
+    "d": "4",
+    "e": "5",
 }
 _VALID_DIGITS = frozenset("12345")
 _VALID_LETTERS = frozenset("AaBbCcDdEe")

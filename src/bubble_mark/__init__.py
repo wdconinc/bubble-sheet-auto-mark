@@ -1,4 +1,5 @@
 """Bubble Sheet Auto-Mark package."""
+
 from importlib.metadata import PackageNotFoundError, version
 
 try:

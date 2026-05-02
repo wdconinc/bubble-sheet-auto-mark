@@ -1,4 +1,5 @@
 """Results screen: display and export grading results."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -47,8 +48,12 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
 
     btn_row = toga.Box(style=Pack(direction=ROW, padding_top=4))
     btn_row.add(
-        toga.Button("Export CSV", on_press=export_csv, style=Pack(flex=1, padding_right=5)),
-        toga.Button("Clear Results", on_press=clear_results, style=Pack(flex=1, padding_right=5)),
+        toga.Button(
+            "Export CSV", on_press=export_csv, style=Pack(flex=1, padding_right=5)
+        ),
+        toga.Button(
+            "Clear Results", on_press=clear_results, style=Pack(flex=1, padding_right=5)
+        ),
         toga.Button("Back", on_press=lambda w: app.go_home(), style=Pack(flex=1)),
     )
 

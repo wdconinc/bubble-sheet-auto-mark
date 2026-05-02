@@ -1,4 +1,5 @@
 """Tests for bubble_mark.models.grade_result."""
+
 from __future__ import annotations
 
 import pytest
