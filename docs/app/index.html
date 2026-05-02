@@ -107,8 +107,10 @@
       border-bottom: 1px solid var(--warn-border);
       padding: 9px 24px;
       font-size: .85rem;
-      display: flex; align-items: flex-start; gap: 8px;
+      display: flex; align-items: flex-start; flex-wrap: wrap; gap: 4px 8px;
     }
+    .privacy-banner .banner-icon { flex-shrink: 0; }
+    .privacy-banner .banner-text { flex: 1; min-width: 0; }
     .privacy-banner strong { white-space: nowrap; }
 
     /* ── Layout ── */
@@ -292,10 +294,11 @@
 </header>
 
 <div class="privacy-banner">
-  🔒 <strong>Privacy-first:</strong>&nbsp;
+  <span class="banner-icon">🔒</span>
+  <span class="banner-text"><strong>Privacy-first:</strong>
   all image processing runs entirely in your browser via
   <a href="https://pyodide.org" target="_blank" rel="noopener noreferrer">Pyodide</a> (Python&nbsp;3.12&nbsp;→&nbsp;WebAssembly).
-  No image or grade data is ever sent to any server.
+  No image or grade data is ever sent to any server.</span>
 </div>
 
 <main>
