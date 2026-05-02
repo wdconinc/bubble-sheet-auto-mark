@@ -219,7 +219,7 @@ class AppSettings:
         """
         ep = self.page_edge_polylines
         if ep is not None and all(
-            isinstance(ep.get(k), list) and len(ep[k]) >= 2
+            isinstance(ep.get(k), list) and len(ep.get(k)) >= 2
             for k in ("top", "bottom", "left", "right")
         ):
             return ("polylines", ep)

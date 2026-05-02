@@ -30,26 +30,28 @@ def no_cv2(monkeypatch):
 class TestRemapNumpy:
     """Tests for the pure-NumPy bilinear remap helper."""
 
-    def _identity_maps(self, h, w):
+    def _identity_maps(self, height, width):
         """Return (map_x, map_y) that sample the source at integer coords."""
-        xs = np.arange(w, dtype=np.float32)
-        ys = np.arange(h, dtype=np.float32)
+        xs = np.arange(width, dtype=np.float32)
+        ys = np.arange(height, dtype=np.float32)
         map_x, map_y = np.meshgrid(xs, ys)
         return map_x, map_y
 
     def test_identity_remap_bgr(self):
         """An identity map should return a pixel-exact copy."""
+        height, width, channels = 10, 12, 3
         rng = np.random.RandomState(0)
-        img = rng.randint(0, 256, (10, 12, 3), dtype=np.uint8)
-        map_x, map_y = self._identity_maps(10, 12)
+        img = rng.randint(0, 256, (height, width, channels), dtype=np.uint8)
+        map_x, map_y = self._identity_maps(height, width)
         result = _remap_numpy(img, map_x, map_y)
         np.testing.assert_array_equal(result, img)
 
     def test_identity_remap_grayscale(self):
         """Identity remap on a grayscale image should return a pixel-exact copy."""
+        height, width = 8, 9
         rng = np.random.RandomState(1)
-        img = rng.randint(0, 256, (8, 9), dtype=np.uint8)
-        map_x, map_y = self._identity_maps(8, 9)
+        img = rng.randint(0, 256, (height, width), dtype=np.uint8)
+        map_x, map_y = self._identity_maps(height, width)
         result = _remap_numpy(img, map_x, map_y)
         np.testing.assert_array_equal(result, img)
 
