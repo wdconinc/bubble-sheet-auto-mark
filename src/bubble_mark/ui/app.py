@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import toga
-from toga.style import Pack
-from toga.style.pack import COLUMN
 
 from bubble_mark.models.answer_key import AnswerKey
 from bubble_mark.models.grade_result import GradeResult
@@ -23,9 +21,12 @@ class BubbleMarkApp(toga.App):
         self.main_window.content = self._build_home()
         self.main_window.show()
 
-        # Schedule update check 2 s after startup
+        # Schedule update check 2 s after startup (daemon thread so it
+        # doesn't keep the process alive on shutdown)
         import threading
-        threading.Timer(2.0, self._trigger_update_check).start()
+        t = threading.Timer(2.0, self._trigger_update_check)
+        t.daemon = True
+        t.start()
 
     def _trigger_update_check(self) -> None:
         from bubble_mark.updater import check_and_prompt_update
@@ -70,4 +71,4 @@ class BubbleMarkApp(toga.App):
 
 def main() -> BubbleMarkApp:
     """Entry point for Briefcase."""
-    return BubbleMarkApp("Bubble Sheet Auto-Mark", "com.wdconinc.bubblemark")
+    return BubbleMarkApp("Bubble Sheet Auto-Mark", "com.wdconinc.bubble_mark")

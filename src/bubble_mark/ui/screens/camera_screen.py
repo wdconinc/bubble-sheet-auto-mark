@@ -28,9 +28,13 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
         status_label.text = "Import not yet implemented in this build."
 
     def process_images(widget: toga.Widget) -> None:
-        from bubble_mark.processing.analyzer import BubbleAnalyzer
-        from bubble_mark.processing.detector import BubbleSheetDetector
-        from bubble_mark.processing.grader import BubbleSheetGrader
+        try:
+            from bubble_mark.processing.analyzer import BubbleAnalyzer
+            from bubble_mark.processing.detector import BubbleSheetDetector
+            from bubble_mark.processing.grader import BubbleSheetGrader
+        except ImportError:
+            status_label.text = "Image processing is not available on this platform."
+            return
 
         if app.answer_key is None:
             status_label.text = "Please configure an answer key in Settings first."
