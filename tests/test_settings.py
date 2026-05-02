@@ -395,3 +395,67 @@ class TestAppSettingsPolylines:
         }
         s = AppSettings.from_dict(d)
         assert s.page_edge_polylines is None
+
+
+class TestGetEdgeCorrectionInputs:
+    """Tests for AppSettings.get_edge_correction_inputs()."""
+
+    @staticmethod
+    def _full_polylines():
+        return {
+            "top": [[0.0, 0.0], [100.0, 0.0]],
+            "bottom": [[0.0, 200.0], [100.0, 200.0]],
+            "left": [[0.0, 0.0], [0.0, 200.0]],
+            "right": [[100.0, 0.0], [100.0, 200.0]],
+        }
+
+    @staticmethod
+    def _four_lines():
+        return [
+            [0, 0, 100, 0],
+            [0, 200, 100, 200],
+            [0, 0, 0, 200],
+            [100, 0, 100, 200],
+        ]
+
+    def test_returns_none_when_nothing_set(self):
+        mode, data = AppSettings().get_edge_correction_inputs()
+        assert mode == "none"
+        assert data is None
+
+    def test_returns_lines_when_only_lines_set(self):
+        s = AppSettings(page_edge_lines=self._four_lines())
+        mode, data = s.get_edge_correction_inputs()
+        assert mode == "lines"
+        assert data is not None
+
+    def test_returns_polylines_when_all_four_edges_set(self):
+        s = AppSettings(page_edge_polylines=self._full_polylines())
+        mode, data = s.get_edge_correction_inputs()
+        assert mode == "polylines"
+        assert data is not None
+
+    def test_polylines_take_priority_over_lines(self):
+        s = AppSettings(
+            page_edge_lines=self._four_lines(),
+            page_edge_polylines=self._full_polylines(),
+        )
+        mode, data = s.get_edge_correction_inputs()
+        assert mode == "polylines"
+
+    def test_partial_polylines_falls_back_to_lines(self):
+        """If only 3 polyline edges are defined, lines should be used."""
+        partial = {k: v for k, v in self._full_polylines().items() if k != "right"}
+        s = AppSettings(
+            page_edge_lines=self._four_lines(),
+            page_edge_polylines=partial,
+        )
+        mode, data = s.get_edge_correction_inputs()
+        assert mode == "lines"
+
+    def test_partial_polylines_no_lines_returns_none(self):
+        """Partial polylines with no fallback lines → 'none'."""
+        partial = {k: v for k, v in self._full_polylines().items() if k != "right"}
+        s = AppSettings(page_edge_polylines=partial)
+        mode, data = s.get_edge_correction_inputs()
+        assert mode == "none"

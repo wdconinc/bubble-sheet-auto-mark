@@ -56,11 +56,13 @@ def _validate_edge_lines(lines: Optional[list]) -> Optional[list]:
 def _validate_edge_polylines(polylines: Optional[dict]) -> Optional[dict]:
     """Return a normalised *polylines* dict if valid, else *None*.
 
-    A valid edge-polylines value is a dict with keys ``'top'``, ``'bottom'``,
-    ``'left'``, and ``'right'``.  Each value may be *None* (edge not yet
-    drawn) or a list of at least two ``[x, y]`` numeric coordinate pairs.
-    Returns *None* if *polylines* is not a dict or if any non-*None* edge
-    entry fails validation.
+    A valid edge-polylines value is a dict that may contain the keys
+    ``'top'``, ``'bottom'``, ``'left'``, and ``'right'``.  Keys that are
+    absent from the input are treated the same as an explicit ``None`` value
+    (i.e., the edge has not yet been drawn).  Each non-*None* value must be a
+    list of at least two ``[x, y]`` numeric coordinate pairs.  Returns *None*
+    if *polylines* is not a dict or if any non-*None* edge entry fails
+    validation.
     """
     if polylines is None:
         return None
@@ -118,7 +120,8 @@ class AppSettings:
         Used by
         :func:`~bubble_mark.processing.distortion.correct_distortion_from_polylines`
         when the sheet edges are curved (e.g., sheet not on a flat surface).
-        Takes priority over *page_edge_lines* when all four edges are present.
+        When all four edges are present, polylines take priority over
+        *page_edge_lines*; see :meth:`get_edge_correction_inputs`.
     reference_color_channel:
         Index of the BGR color channel to use as the primary print-color
         reference channel (0=Blue, 1=Green, 2=Red).  Defaults to ``1``
@@ -191,3 +194,35 @@ class AppSettings:
     def default(cls) -> "AppSettings":
         """Return a default :class:`AppSettings` instance."""
         return cls()
+
+    # ------------------------------------------------------------------
+    # Edge-correction selection
+    # ------------------------------------------------------------------
+
+    def get_edge_correction_inputs(
+        self,
+    ) -> tuple:
+        """Return the best available edge-correction inputs.
+
+        Priority:
+
+        1. ``('polylines', dict)`` – when *page_edge_polylines* has all four
+           edges defined with at least two points each.
+        2. ``('lines', list)`` – when *page_edge_lines* is set.
+        3. ``('none', None)`` – when neither is available.
+
+        Returns
+        -------
+        tuple
+            A ``(mode, data)`` pair where *mode* is one of
+            ``'polylines'``, ``'lines'``, or ``'none'``.
+        """
+        ep = self.page_edge_polylines
+        if ep is not None and all(
+            isinstance(ep.get(k), list) and len(ep[k]) >= 2
+            for k in ("top", "bottom", "left", "right")
+        ):
+            return ("polylines", ep)
+        if self.page_edge_lines is not None:
+            return ("lines", self.page_edge_lines)
+        return ("none", None)

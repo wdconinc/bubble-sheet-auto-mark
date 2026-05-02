@@ -7,6 +7,7 @@ import pytest
 
 import bubble_mark.processing.distortion as _dist_mod
 from bubble_mark.processing.distortion import (
+    _remap_numpy,
     apply_homography,
     correct_distortion_from_lines,
     correct_distortion_from_polylines,
@@ -19,6 +20,100 @@ from bubble_mark.processing.distortion import (
 def no_cv2(monkeypatch):
     """Force the pure NumPy/Pillow fallback paths."""
     monkeypatch.setattr(_dist_mod, "_HAVE_CV2", False)
+
+
+# ---------------------------------------------------------------------------
+# _remap_numpy
+# ---------------------------------------------------------------------------
+
+
+class TestRemapNumpy:
+    """Tests for the pure-NumPy bilinear remap helper."""
+
+    def _identity_maps(self, h, w):
+        """Return (map_x, map_y) that sample the source at integer coords."""
+        xs = np.arange(w, dtype=np.float32)
+        ys = np.arange(h, dtype=np.float32)
+        map_x, map_y = np.meshgrid(xs, ys)
+        return map_x, map_y
+
+    def test_identity_remap_bgr(self):
+        """An identity map should return a pixel-exact copy."""
+        rng = np.random.RandomState(0)
+        img = rng.randint(0, 256, (10, 12, 3), dtype=np.uint8)
+        map_x, map_y = self._identity_maps(10, 12)
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, img)
+
+    def test_identity_remap_grayscale(self):
+        """Identity remap on a grayscale image should return a pixel-exact copy."""
+        rng = np.random.RandomState(1)
+        img = rng.randint(0, 256, (8, 9), dtype=np.uint8)
+        map_x, map_y = self._identity_maps(8, 9)
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, img)
+
+    def test_border_pixel_has_correct_value(self):
+        """Sampling exactly at the last column/row must not return black."""
+        # 4-pixel wide image; pixels at x=3 (last column) should be preserved.
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        img[:, 3] = 150  # set last column to a distinct value
+        # Sample every output pixel at x=3 exactly (right border).
+        map_x = np.full((4, 4), 3.0, dtype=np.float32)
+        map_y = np.arange(4, dtype=np.float32)[:, np.newaxis].repeat(4, axis=1)
+        result = _remap_numpy(img, map_x, map_y)
+        # Every output pixel should be 150, not 0 (the old zero-weight bug).
+        np.testing.assert_array_equal(result, np.full((4, 4, 3), 150, dtype=np.uint8))
+
+    def test_border_row_pixel_has_correct_value(self):
+        """Sampling exactly at the last row must not return black."""
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        img[3, :] = 130  # set last row to a distinct value
+        map_x = np.arange(4, dtype=np.float32)[np.newaxis, :].repeat(4, axis=0)
+        map_y = np.full((4, 4), 3.0, dtype=np.float32)
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, np.full((4, 4, 3), 130, dtype=np.uint8))
+
+    def test_out_of_bounds_is_zero(self):
+        """Samples outside [0, W-1] × [0, H-1] must produce zero (BORDER_CONSTANT)."""
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        # map_x = -1 for every pixel → all out of bounds.
+        map_x = np.full((4, 4), -1.0, dtype=np.float32)
+        map_y = self._identity_maps(4, 4)[1]
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, np.zeros((4, 4, 3), dtype=np.uint8))
+
+    def test_out_of_bounds_right_is_zero(self):
+        """Samples at x > iw-1 must produce zero."""
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        map_x = np.full((4, 4), 4.0, dtype=np.float32)  # iw=4, so x=4 OOB
+        map_y = self._identity_maps(4, 4)[1]
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, np.zeros((4, 4, 3), dtype=np.uint8))
+
+    def test_partial_out_of_bounds(self):
+        """Only in-bounds pixels get interpolated; out-of-bounds are zero."""
+        img = np.full((4, 4, 3), 100, dtype=np.uint8)
+        map_x, map_y = self._identity_maps(4, 4)
+        # Force the first column out of bounds.
+        map_x[:, 0] = -1.0
+        result = _remap_numpy(img, map_x, map_y)
+        # First column must be 0; the rest must be 100.
+        np.testing.assert_array_equal(result[:, 0], np.zeros((4, 3), dtype=np.uint8))
+        np.testing.assert_array_equal(
+            result[:, 1:], np.full((4, 3, 3), 100, dtype=np.uint8)
+        )
+
+    def test_half_pixel_bilinear(self):
+        """Sampling at the half-pixel boundary between two columns averages them."""
+        # 1×2 image: col 0 = 0, col 1 = 100
+        img = np.array([[[0, 0, 0], [100, 100, 100]]], dtype=np.uint8)  # (1,2,3)
+        map_x = np.array([[0.5]], dtype=np.float32)
+        map_y = np.array([[0.0]], dtype=np.float32)
+        result = _remap_numpy(img, map_x, map_y)
+        # Expected: 50 (bilinear average)
+        expected = np.array([[[50, 50, 50]]], dtype=np.uint8)
+        np.testing.assert_array_equal(result, expected)
 
 
 # ---------------------------------------------------------------------------

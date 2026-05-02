@@ -326,24 +326,38 @@ def _remap_numpy(
     """
     ih, iw = image.shape[:2]
 
-    x = np.clip(map_x.astype(np.float64), 0.0, iw - 1.0)
-    y = np.clip(map_y.astype(np.float64), 0.0, ih - 1.0)
+    x_raw = map_x.astype(np.float64)
+    y_raw = map_y.astype(np.float64)
 
-    x0 = np.floor(x).astype(np.int32)
+    # BORDER_CONSTANT: samples outside the source image contribute zero,
+    # matching cv2.remap(borderMode=cv2.BORDER_CONSTANT, borderValue=0).
+    in_bounds = (
+        (x_raw >= 0.0) & (x_raw <= iw - 1.0) &
+        (y_raw >= 0.0) & (y_raw <= ih - 1.0)
+    )
+
+    # Integer floor coordinates, clamped for safe array indexing.
+    x0 = np.clip(np.floor(x_raw).astype(np.int32), 0, iw - 1)
+    y0 = np.clip(np.floor(y_raw).astype(np.int32), 0, ih - 1)
     x1 = np.minimum(x0 + 1, iw - 1)
-    y0 = np.floor(y).astype(np.int32)
     y1 = np.minimum(y0 + 1, ih - 1)
 
-    wa = ((x1 - x) * (y1 - y)).astype(np.float32)
-    wb = ((x - x0) * (y1 - y)).astype(np.float32)
-    wc = ((x1 - x) * (y - y0)).astype(np.float32)
-    wd = ((x - x0) * (y - y0)).astype(np.float32)
+    # Fractional parts for bilinear weights.  Using dx/dy avoids the
+    # zero-weight bug that occurs when x0==x1 (border column/row after
+    # clamping) with the older (x1-x)/(y1-y) formulation.
+    dx = (x_raw - np.floor(x_raw)).astype(np.float32)
+    dy = (y_raw - np.floor(y_raw)).astype(np.float32)
+    wa = (1.0 - dx) * (1.0 - dy)
+    wb = dx * (1.0 - dy)
+    wc = (1.0 - dx) * dy
+    wd = dx * dy
 
     if image.ndim == 3:
         wa = wa[:, :, np.newaxis]
         wb = wb[:, :, np.newaxis]
         wc = wc[:, :, np.newaxis]
         wd = wd[:, :, np.newaxis]
+        in_bounds = in_bounds[:, :, np.newaxis]
 
     result = (
         wa * image[y0, x0].astype(np.float32)
@@ -351,7 +365,7 @@ def _remap_numpy(
         + wc * image[y1, x0].astype(np.float32)
         + wd * image[y1, x1].astype(np.float32)
     )
-    return np.clip(result, 0, 255).astype(np.uint8)
+    return np.where(in_bounds, np.clip(result, 0, 255), 0).astype(np.uint8)
 
 
 # ---------------------------------------------------------------------------
