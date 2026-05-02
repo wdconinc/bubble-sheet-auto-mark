@@ -810,48 +810,51 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
     from bubble_mark.processing.color_channel import extract_print_channel, enhance_contrast
     from bubble_mark.processing.image_utils import find_page_contour, perspective_transform
 
-    data = image_bytes_js.to_py()
-    pil  = PILImage.open(io.BytesIO(data)).convert('RGB')
-    rgb  = np.array(pil, dtype=np.uint8)
-    bgr  = rgb[:, :, ::-1].copy()
+    try:
+        data = image_bytes_js.to_py()
+        pil  = PILImage.open(io.BytesIO(data)).convert('RGB')
+        rgb  = np.array(pil, dtype=np.uint8)
+        bgr  = rgb[:, :, ::-1].copy()
 
-    edge_lines = json.loads(str(edge_lines_json))
+        edge_lines = json.loads(str(edge_lines_json))
 
-    def _apply_correction(img, lines):
-        if lines and len(lines) == 4:
-            from bubble_mark.processing.distortion import correct_distortion_from_lines
-            result = correct_distortion_from_lines(img, lines)
-            if result is not None:
-                return result
-        contour = find_page_contour(img)
-        if contour is not None:
-            return perspective_transform(img, contour)
-        return img
+        def _apply_correction(img, lines):
+            if lines and len(lines) == 4:
+                from bubble_mark.processing.distortion import correct_distortion_from_lines
+                result = correct_distortion_from_lines(img, lines)
+                if result is not None:
+                    return result
+            contour = find_page_contour(img)
+            if contour is not None:
+                return perspective_transform(img, contour)
+            return img
 
-    corrected = _apply_correction(bgr, edge_lines)
+        corrected = _apply_correction(bgr, edge_lines)
 
-    variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
-    best_channel = int(np.argmax(variances))
-    channel      = extract_print_channel(corrected, best_channel)
-    enhanced     = enhance_contrast(channel)
+        variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
+        best_channel = int(np.argmax(variances))
+        channel      = extract_print_channel(corrected, best_channel)
+        enhanced     = enhance_contrast(channel)
 
-    def _to_b64(arr, mode='BGR'):
-        if mode == 'BGR':
-            pil_img = PILImage.fromarray(arr[:, :, ::-1].astype(np.uint8), 'RGB')
-        else:
-            pil_img = PILImage.fromarray(arr.astype(np.uint8), 'L')
-        buf = io.BytesIO()
-        pil_img.save(buf, format='PNG')
-        return base64.b64encode(buf.getvalue()).decode('ascii')
+        def _to_b64(arr, mode='BGR'):
+            if mode == 'BGR':
+                pil_img = PILImage.fromarray(arr[:, :, ::-1].astype(np.uint8), 'RGB')
+            else:
+                pil_img = PILImage.fromarray(arr.astype(np.uint8), 'L')
+            buf = io.BytesIO()
+            pil_img.save(buf, format='PNG')
+            return base64.b64encode(buf.getvalue()).decode('ascii')
 
-    return json.dumps({
-        'corrected_image_b64': _to_b64(corrected, 'BGR'),
-        'enhanced_image_b64':  _to_b64(enhanced,  'L'),
-        'best_channel':        best_channel,
-        'channel_variances':   variances,
-        'width':               int(corrected.shape[1]),
-        'height':              int(corrected.shape[0]),
-    })
+        return json.dumps({
+            'corrected_image_b64': _to_b64(corrected, 'BGR'),
+            'enhanced_image_b64':  _to_b64(enhanced,  'L'),
+            'best_channel':        best_channel,
+            'channel_variances':   variances,
+            'width':               int(corrected.shape[1]),
+            'height':              int(corrected.shape[0]),
+        })
+    except Exception:
+        return 'null'
 
 
 def enhance_reference_channel(corrected_image_b64_str, channel):
@@ -870,20 +873,23 @@ def enhance_reference_channel(corrected_image_b64_str, channel):
     import base64
     from bubble_mark.processing.color_channel import extract_print_channel, enhance_contrast
 
-    img_data = base64.b64decode(str(corrected_image_b64_str))
-    pil  = PILImage.open(io.BytesIO(img_data)).convert('RGB')
-    rgb  = np.array(pil, dtype=np.uint8)
-    bgr  = rgb[:, :, ::-1].copy()
+    try:
+        img_data = base64.b64decode(str(corrected_image_b64_str))
+        pil  = PILImage.open(io.BytesIO(img_data)).convert('RGB')
+        rgb  = np.array(pil, dtype=np.uint8)
+        bgr  = rgb[:, :, ::-1].copy()
 
-    ch       = extract_print_channel(bgr, int(channel))
-    enhanced = enhance_contrast(ch)
+        ch       = extract_print_channel(bgr, int(channel))
+        enhanced = enhance_contrast(ch)
 
-    pil_e = PILImage.fromarray(enhanced.astype(np.uint8), 'L')
-    buf   = io.BytesIO()
-    pil_e.save(buf, format='PNG')
-    return json.dumps({
-        'enhanced_image_b64': base64.b64encode(buf.getvalue()).decode('ascii'),
-    })
+        pil_e = PILImage.fromarray(enhanced.astype(np.uint8), 'L')
+        buf   = io.BytesIO()
+        pil_e.save(buf, format='PNG')
+        return json.dumps({
+            'enhanced_image_b64': base64.b64encode(buf.getvalue()).decode('ascii'),
+        })
+    except Exception:
+        return 'null'
 
 
 def detect_reference_grid(corrected_image_b64_str, answer_region_json, id_region_json,
@@ -905,45 +911,45 @@ def detect_reference_grid(corrected_image_b64_str, answer_region_json, id_region
         id_lines_h, id_lines_v         – same for the ID region.
     """
     import base64
-    from bubble_mark.processing.grid_detection import detect_bubble_grid
+    from bubble_mark.processing.grid_detection import detect_grid_lines
 
-    img_data = base64.b64decode(str(corrected_image_b64_str))
-    pil  = PILImage.open(io.BytesIO(img_data)).convert('RGB')
-    rgb  = np.array(pil, dtype=np.uint8)
-    bgr  = rgb[:, :, ::-1].copy()
-    H, W = bgr.shape[:2]
+    try:
+        img_data = base64.b64decode(str(corrected_image_b64_str))
+        pil  = PILImage.open(io.BytesIO(img_data)).convert('RGB')
+        rgb  = np.array(pil, dtype=np.uint8)
+        bgr  = rgb[:, :, ::-1].copy()
+        H, W = bgr.shape[:2]
 
-    def _region_lines(region_json_str, num_rows, num_cols):
-        region = json.loads(str(region_json_str))
-        if not region:
-            return None
-        x1, y1, x2, y2 = region
-        ix1, iy1 = int(x1 * W), int(y1 * H)
-        ix2, iy2 = int(x2 * W), int(y2 * H)
-        if ix2 <= ix1 or iy2 <= iy1:
-            return None
-        roi  = bgr[iy1:iy2, ix1:ix2]
-        grid = detect_bubble_grid(roi, int(num_rows), int(num_cols))
-        if grid is None:
-            return None
-        h_set, v_set = set(), set()
-        for row in grid:
-            for (bx, by, bw, bh) in row:
-                h_set.add(iy1 + by)
-                h_set.add(iy1 + by + bh)
-                v_set.add(ix1 + bx)
-                v_set.add(ix1 + bx + bw)
-        return sorted(h_set), sorted(v_set)
+        def _region_lines(region_json_str, num_rows, num_cols):
+            region = json.loads(str(region_json_str))
+            if not region:
+                return None
+            x1, y1, x2, y2 = region
+            ix1, iy1 = int(x1 * W), int(y1 * H)
+            ix2, iy2 = int(x2 * W), int(y2 * H)
+            if ix2 <= ix1 or iy2 <= iy1:
+                return None
+            roi    = bgr[iy1:iy2, ix1:ix2]
+            result = detect_grid_lines(roi, int(num_rows), int(num_cols))
+            if result is None:
+                return None
+            row_ys, col_xs = result
+            # Offset local ROI coordinates back into full corrected-image space
+            h_lines = [iy1 + y for y in row_ys]
+            v_lines = [ix1 + x for x in col_xs]
+            return h_lines, v_lines
 
-    out = {}
-    ans = _region_lines(answer_region_json, int(num_questions), int(num_choices))
-    if ans:
-        out['answer_lines_h'], out['answer_lines_v'] = ans
-    idr = _region_lines(id_region_json, 10, int(num_id_digits))
-    if idr:
-        out['id_lines_h'], out['id_lines_v'] = idr
+        out = {}
+        ans = _region_lines(answer_region_json, int(num_questions), int(num_choices))
+        if ans:
+            out['answer_lines_h'], out['answer_lines_v'] = ans
+        idr = _region_lines(id_region_json, 10, int(num_id_digits))
+        if idr:
+            out['id_lines_h'], out['id_lines_v'] = idr
 
-    return json.dumps(out)
+        return json.dumps(out)
+    except Exception:
+        return 'null'
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────
