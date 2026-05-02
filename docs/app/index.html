@@ -253,7 +253,7 @@
       background: #000; border-radius: var(--radius); display: block;
     }
     /* Canvas drawn on top of #camera-video; pointer-events:none so clicks pass through */
-    #camera-overlay, #ref-camera-overlay {
+    #camera-overlay {
       position: absolute; top: 0; left: 0;
       width: 100%; height: 100%;
       pointer-events: none; border-radius: var(--radius);
@@ -464,7 +464,6 @@
         <div id="ref-camera-section">
           <div style="position: relative;">
             <video id="ref-camera-video" autoplay playsinline muted></video>
-            <canvas id="ref-camera-overlay"></canvas>
           </div>
           <div class="btn-row" style="margin-top:8px">
             <button class="btn-primary" id="btn-ref-capture">📸 Capture Frame</button>
@@ -1081,7 +1080,6 @@ const btnRefCamera    = $('btn-ref-camera');
 const btnRefClear     = $('btn-ref-clear');
 const refCameraSection = $('ref-camera-section');
 const refCameraVideo  = $('ref-camera-video');
-const refCameraOverlay = $('ref-camera-overlay');
 const btnRefCapture   = $('btn-ref-capture');
 const btnRefStopCam   = $('btn-ref-stop-camera');
 const refCanvasSection = $('ref-canvas-section');
@@ -2146,9 +2144,11 @@ btnRefCamera.addEventListener('click', async () => {
     return;
   }
   try {
-    refCameraStream = await navigator.mediaDevices.getUserMedia({
+    const newStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } },
     });
+    stopRefCamera();
+    refCameraStream = newStream;
     refCameraVideo.srcObject = refCameraStream;
     refCameraSection.style.display = 'block';
     setStatus('Point the camera at the blank bubble sheet and tap "Capture Frame".', 'info');
@@ -2190,6 +2190,10 @@ btnRefCapture.addEventListener('click', () => {
         btnRefClear.style.display = 'inline-flex';
         setRefStep(0);
         URL.revokeObjectURL(url);
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        setStatus('Failed to load captured frame as an image. Please try again.', 'error');
       };
       img.src = url;
     }).catch((err) => {
