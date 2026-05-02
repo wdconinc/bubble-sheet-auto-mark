@@ -241,3 +241,62 @@ class TestSectionRects:
         assert y1 == int(h * region[1])
         assert x2 == int(w * region[2])
         assert y2 == int(h * region[3])
+
+
+class TestDetectorWithReferenceImage:
+    """Tests for the new reference_image and reference_color_channel parameters."""
+
+    def test_reference_image_stored(self):
+        ref = create_blank_sheet()
+        d = BubbleSheetDetector(reference_image=ref)
+        assert d.reference_image is not None
+        assert d.reference_image.shape == ref.shape
+
+    def test_default_reference_image_is_none(self):
+        d = BubbleSheetDetector()
+        assert d.reference_image is None
+
+    def test_default_reference_color_channel(self):
+        d = BubbleSheetDetector()
+        assert d.reference_color_channel == 1
+
+    def test_custom_reference_color_channel(self):
+        d = BubbleSheetDetector(reference_color_channel=2)
+        assert d.reference_color_channel == 2
+
+    def test_detect_with_reference_returns_ndarray(self):
+        """detect() should still return a valid image when a reference is set."""
+        ref = create_blank_sheet()
+        d = BubbleSheetDetector(reference_image=ref)
+        sheet = create_blank_sheet()
+        result = d.detect(sheet)
+        assert isinstance(result, np.ndarray)
+        assert result.shape[1] == 850
+        assert result.shape[0] == 1100
+
+    def test_answer_bubbles_with_reference_correct_shape(self):
+        """Grid dimensions must be preserved regardless of reference usage."""
+        ref = create_blank_sheet()
+        d = BubbleSheetDetector(
+            {"num_questions": 5, "num_choices": 5},
+            reference_image=ref,
+        )
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        grid = d.locate_answer_bubbles(normalised)
+        assert len(grid) == 5
+        for row in grid:
+            assert len(row) == 5
+
+    def test_id_bubbles_with_reference_correct_shape(self):
+        ref = create_blank_sheet()
+        d = BubbleSheetDetector(
+            {"num_id_digits": 9, "id_choices_per_digit": 10},
+            reference_image=ref,
+        )
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        columns = d.locate_id_bubbles(normalised)
+        assert len(columns) == 9
+        for col in columns:
+            assert len(col) == 10

@@ -146,3 +146,106 @@ class TestSaveLoad:
         loaded = AppSettings.load(path)
         assert loaded.answer_region == [0.0, 0.0, 1.0, 0.72]
         assert loaded.id_region == [0.0, 0.74, 1.0, 1.0]
+
+
+class TestValidateEdgeLines:
+    def test_valid_four_lines(self):
+        from bubble_mark.models.settings import _validate_edge_lines
+
+        lines = [
+            [0, 0, 100, 0],
+            [0, 200, 100, 200],
+            [0, 0, 0, 200],
+            [100, 0, 100, 200],
+        ]
+        result = _validate_edge_lines(lines)
+        assert result is not None
+        assert len(result) == 4
+
+    def test_none_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_lines
+
+        assert _validate_edge_lines(None) is None
+
+    def test_wrong_count_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_lines
+
+        lines = [[0, 0, 100, 0], [0, 200, 100, 200]]  # only 2
+        assert _validate_edge_lines(lines) is None
+
+    def test_wrong_length_per_line_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_lines
+
+        lines = [[0, 0, 100], [0, 200, 100, 200], [0, 0, 0, 200], [100, 0, 100, 200]]
+        assert _validate_edge_lines(lines) is None
+
+    def test_non_numeric_returns_none(self):
+        from bubble_mark.models.settings import _validate_edge_lines
+
+        lines = [
+            ["a", "b", "c", "d"],
+            [0, 200, 100, 200],
+            [0, 0, 0, 200],
+            [100, 0, 100, 200],
+        ]
+        assert _validate_edge_lines(lines) is None
+
+
+class TestAppSettingsNewFields:
+    def test_default_page_edge_lines_is_none(self):
+        assert AppSettings().page_edge_lines is None
+
+    def test_custom_page_edge_lines_stored(self):
+        lines = [
+            [0, 0, 100, 0],
+            [0, 200, 100, 200],
+            [0, 0, 0, 200],
+            [100, 0, 100, 200],
+        ]
+        s = AppSettings(page_edge_lines=lines)
+        assert s.page_edge_lines is not None
+        assert len(s.page_edge_lines) == 4
+
+    def test_invalid_page_edge_lines_stored_as_none(self):
+        s = AppSettings(page_edge_lines=[[0, 0, 100, 0]])  # only 1 line
+        assert s.page_edge_lines is None
+
+    def test_default_reference_color_channel(self):
+        assert AppSettings().reference_color_channel == 1
+
+    def test_custom_reference_color_channel(self):
+        assert AppSettings(reference_color_channel=2).reference_color_channel == 2
+
+    def test_round_trip_with_new_fields(self):
+        lines = [
+            [0.0, 0.0, 100.0, 0.0],
+            [0.0, 200.0, 100.0, 200.0],
+            [0.0, 0.0, 0.0, 200.0],
+            [100.0, 0.0, 100.0, 200.0],
+        ]
+        orig = AppSettings(
+            page_edge_lines=lines,
+            reference_color_channel=2,
+        )
+        restored = AppSettings.from_dict(orig.to_dict())
+        assert restored.page_edge_lines is not None
+        assert len(restored.page_edge_lines) == 4
+        assert restored.reference_color_channel == 2
+
+    def test_to_dict_contains_new_keys(self):
+        d = AppSettings().to_dict()
+        assert "page_edge_lines" in d
+        assert "reference_color_channel" in d
+
+    def test_load_legacy_dict_without_new_fields(self):
+        """Loading a dict without the new keys should use defaults."""
+        d = {
+            "layout_config": {},
+            "reference_image_path": None,
+            "fill_threshold": 0.5,
+            "answer_region": None,
+            "id_region": None,
+        }
+        s = AppSettings.from_dict(d)
+        assert s.page_edge_lines is None
+        assert s.reference_color_channel == 1

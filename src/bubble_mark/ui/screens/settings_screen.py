@@ -101,6 +101,37 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
         style=Pack(padding_bottom=6),
     )
 
+    # ── Configure Reference Sheet button ─────────────────────────────────
+
+    def _open_reference_setup(widget: toga.Widget) -> None:
+        """Navigate to the interactive reference sheet setup screen."""
+        if hasattr(app, "go_reference_setup"):
+            app.go_reference_setup()
+        else:
+            status_label.text = "Reference setup not available in this build."
+
+    btn_configure_ref = toga.Button(
+        "Configure Reference Sheet…",
+        on_press=_open_reference_setup,
+        style=Pack(padding_bottom=8),
+    )
+
+    # ── Reference color channel selector ─────────────────────────────────
+
+    channel_label = toga.Label(
+        "Reference color channel:",
+        style=Pack(padding_bottom=2),
+    )
+    _channel_options = ["Blue (0)", "Green (1)", "Red (2)"]
+    sel_channel = toga.Selection(
+        items=_channel_options,
+        style=Pack(padding_bottom=8, width=160),
+    )
+    # Pre-select current channel (default 1 = green)
+    _ch_idx = int(getattr(s, "reference_color_channel", 1))
+    if 0 <= _ch_idx < len(_channel_options):
+        sel_channel.value = _channel_options[_ch_idx]
+
     region_hint = toga.Label(
         'Regions as "x1, y1, x2, y2" fractions (0–1). '
         "Example answer region: 0, 0, 1, 0.72  |  ID region: 0, 0.74, 1, 1",
@@ -145,12 +176,20 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
             answer_region = _parse_region(inp_answer_region.value)
             id_region = _parse_region(inp_id_region.value)
 
+            # Derive reference_color_channel from the selection widget
+            try:
+                ref_ch = _channel_options.index(sel_channel.value)
+            except (ValueError, AttributeError):
+                ref_ch = 1
+
             app.app_settings = AppSettings(
                 layout_config=layout,
                 reference_image_path=ref_path,
                 fill_threshold=threshold,
                 answer_region=answer_region,
                 id_region=id_region,
+                page_edge_lines=getattr(app.app_settings, "page_edge_lines", None),
+                reference_color_channel=ref_ch,
             )
             key_text = inp_answer_key.value.strip()
             if key_text:
@@ -179,6 +218,9 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
         ref_hint,
         btn_ref,
         ref_path_label,
+        btn_configure_ref,
+        channel_label,
+        sel_channel,
         region_hint,
         _row("Answer Region (x1,y1,x2,y2)", inp_answer_region),
         _row("ID Region (x1,y1,x2,y2)", inp_id_region),
