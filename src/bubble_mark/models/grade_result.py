@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
+
 if TYPE_CHECKING:
     from bubble_mark.models.answer_key import AnswerKey
 
@@ -35,6 +37,7 @@ class GradeResult:
         self.student_id = student_id
         self.answers = answers
         self.answer_key = answer_key
+        self.annotated_image: Optional[np.ndarray] = None
 
     # ------------------------------------------------------------------
     # Computed properties

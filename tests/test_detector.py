@@ -113,3 +113,37 @@ class TestLocateIdBubbles:
                     f"ID bubble y={y} is above the ID section "
                     f"start at {id_section_start}"
                 )
+
+
+class TestSectionRects:
+    def test_answer_section_rect_shape(self):
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        rect = d.answer_section_rect(normalised)
+        assert len(rect) == 4
+        x1, y1, x2, y2 = rect
+        assert x1 == 0
+        assert y1 == 0
+        assert x2 == normalised.shape[1]
+        assert y2 == int(normalised.shape[0] * 0.72)
+
+    def test_id_section_rect_shape(self):
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        rect = d.id_section_rect(normalised)
+        assert len(rect) == 4
+        x1, y1, x2, y2 = rect
+        assert x1 == 0
+        assert y1 == int(normalised.shape[0] * 0.74)
+        assert x2 == normalised.shape[1]
+        assert y2 == normalised.shape[0]
+
+    def test_answer_and_id_sections_do_not_overlap(self):
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        _, _, _, a_y2 = d.answer_section_rect(normalised)
+        _, i_y1, _, _ = d.id_section_rect(normalised)
+        assert a_y2 <= i_y1

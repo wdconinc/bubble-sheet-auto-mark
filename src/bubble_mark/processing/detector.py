@@ -57,6 +57,20 @@ class BubbleSheetDetector:
         normalised = resize_image(normalised, width=_SHEET_WIDTH, height=_SHEET_HEIGHT)
         return normalised
 
+    def answer_section_rect(
+        self, normalised_image: np.ndarray
+    ) -> tuple[int, int, int, int]:
+        """Return ``(x1, y1, x2, y2)`` bounding box of the answer section."""
+        h, w = normalised_image.shape[:2]
+        return (0, 0, w, int(h * 0.72))
+
+    def id_section_rect(
+        self, normalised_image: np.ndarray
+    ) -> tuple[int, int, int, int]:
+        """Return ``(x1, y1, x2, y2)`` bounding box of the student-ID section."""
+        h, w = normalised_image.shape[:2]
+        return (0, int(h * 0.74), w, h)
+
     def locate_answer_bubbles(
         self, normalised_image: np.ndarray
     ) -> list[list[tuple[int, int, int, int]]]:
