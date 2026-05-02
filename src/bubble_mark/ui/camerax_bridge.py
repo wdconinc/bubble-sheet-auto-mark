@@ -25,6 +25,7 @@ Usage::
 from __future__ import annotations
 
 import sys
+import threading
 from typing import Callable
 
 import numpy as np
@@ -363,15 +364,23 @@ def _start_ios(callback: FrameCallback) -> bool:
 
     # ── Session ───────────────────────────────────────────────────────────
     session = AVCaptureSession.alloc().init()
-    if session.canAddInput_(device_input):
-        session.addInput_(device_input)
-    if session.canAddOutput_(output):
-        session.addOutput_(output)
+    if not session.canAddInput_(device_input):
+        log.error("AVCaptureSession cannot add video input.")
+        return False
+    session.addInput_(device_input)
 
-    session.startRunning()
+    if not session.canAddOutput_(output):
+        log.error("AVCaptureSession cannot add video output.")
+        return False
+    session.addOutput_(output)
 
+    # Store session/delegate before starting so _stop_ios() can always find them.
     _ios_session = session
     _ios_delegate = delegate  # prevent GC of the delegate
+
+    # startRunning() can block while the session warms up; dispatch it off
+    # the main thread to avoid freezing the Toga UI.
+    threading.Thread(target=session.startRunning, daemon=True).start()
     return True
 
 

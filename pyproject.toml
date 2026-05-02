@@ -95,9 +95,8 @@ requires = [
     "toga-iOS>=0.4",
     "Pillow>=10.0",
     "numpy>=1.26",
-    # opencv-python-headless has no iOS wheel; the contour overlay is silently
-    # skipped and grading falls back to "Image processing is not available on
-    # this platform." until a compatible iOS wheel is published.
+    # opencv-python-headless has no iOS wheel; the contour overlay falls back to
+    # the built-in NumPy/Pillow implementation (cv2 is not required for grading).
 ]
 
 [tool.briefcase.app.bubble-mark.iOS.info]
