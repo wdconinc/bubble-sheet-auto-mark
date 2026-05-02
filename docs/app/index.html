@@ -483,7 +483,7 @@
       <div id="camera-section">
         <div id="live-overlay-badge">
           <span class="live-badge"><span class="live-dot"></span> LIVE</span>
-          &nbsp;Green outline = page detected
+          &nbsp;Green outline = page detected · Gold = auto-capture armed
         </div>
         <div style="position: relative;">
           <video id="camera-video" autoplay playsinline muted></video>
@@ -1109,9 +1109,10 @@ btnCapture.addEventListener('click', () => {
 btnStopCam.addEventListener('click', stopCamera);
 
 chkAutoCapture.addEventListener('change', () => {
-  autoCaptureEnabled     = chkAutoCapture.checked;
-  autoCaptureStableCount = 0;
-  autoCapturePrevData    = null;
+  autoCaptureEnabled       = chkAutoCapture.checked;
+  autoCaptureStableCount   = 0;
+  autoCapturePrevData      = null;
+  autoCaptureCooldownUntil = 0;
   if (autoCaptureEnabled) {
     setStatus('Auto-capture on — hold the camera still over a sheet.', 'info');
   }
@@ -1344,10 +1345,11 @@ async function restorePendingImage() {
 function startLiveOverlay() {
   if (liveLoopId !== null) return;
   overlaySession++;
-  liveLoopBusy           = false;
-  liveContour            = null;
-  autoCaptureStableCount = 0;
-  autoCapturePrevData    = null;
+  liveLoopBusy              = false;
+  liveContour               = null;
+  autoCaptureStableCount    = 0;
+  autoCapturePrevData       = null;
+  autoCaptureCooldownUntil  = 0;
   liveCanvasW  = 0;   // force dimension sync on first tick
   liveCanvasH  = 0;
   liveCtx      = null;
@@ -1371,19 +1373,26 @@ function stopLiveOverlay() {
   liveOverlayBadge.style.display = 'none';
 }
 
+// Persistent offscreen canvas/context reused by computeMotionMad to avoid
+// per-cycle allocation and GC pressure.
+let _motionThumbCanvas = null;
+let _motionThumbCtx    = null;
+
 /**
  * Downsample srcCanvas to a small thumbnail, compare it against the previous
  * thumbnail, and return the mean absolute pixel difference per channel (0–255).
  * Returns null on the first call (no previous frame to compare).
  * Side-effect: updates autoCapturePrevData for the next call.
  */
-function _computeMotionMad(srcCanvas) {
-  const thumb = document.createElement('canvas');
-  thumb.width  = AUTO_CAPTURE_THUMB_W;
-  thumb.height = AUTO_CAPTURE_THUMB_H;
-  const tctx = thumb.getContext('2d');
-  tctx.drawImage(srcCanvas, 0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H);
-  const data = tctx.getImageData(0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H).data;
+function computeMotionMad(srcCanvas) {
+  if (!_motionThumbCanvas) {
+    _motionThumbCanvas = document.createElement('canvas');
+    _motionThumbCanvas.width  = AUTO_CAPTURE_THUMB_W;
+    _motionThumbCanvas.height = AUTO_CAPTURE_THUMB_H;
+    _motionThumbCtx = _motionThumbCanvas.getContext('2d');
+  }
+  _motionThumbCtx.drawImage(srcCanvas, 0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H);
+  const data = _motionThumbCtx.getImageData(0, 0, AUTO_CAPTURE_THUMB_W, AUTO_CAPTURE_THUMB_H).data;
   const prev = autoCapturePrevData;
   autoCapturePrevData = data;
   if (prev === null) return null;
@@ -1431,7 +1440,7 @@ function liveOverlayTick(now) {
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
   // Motion MAD computed synchronously from raw pixels before the async toBlob
   // gap, so the result is ready inside the callback without extra canvas work.
-  const motionMad = autoCaptureEnabled ? _computeMotionMad(cap) : null;
+  const motionMad = autoCaptureEnabled ? computeMotionMad(cap) : null;
   const mySession = overlaySession;  // snapshot before the async gap
   cap.toBlob(async (blob) => {
     // Bail out if the camera was stopped or a new session started while waiting.
