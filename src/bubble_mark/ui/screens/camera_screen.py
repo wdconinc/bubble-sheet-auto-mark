@@ -137,10 +137,13 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
     def open_camera(widget: toga.Widget) -> None:
         if _is_android():
             from bubble_mark.ui.camerax_bridge import start_camera
-            # start_camera is idempotent; repeated taps are safe.
             status_label.text = "Starting camera…"
             logger.info("Opening camera (Android CameraX).")
-            start_camera(_on_frame)
+            started = start_camera(_on_frame)
+            if not started:
+                status_label.text = (
+                    "Camera permission requested. Please grant it and tap 'Open Camera' again."
+                )
         else:
             logger.info("Desktop: opening file-import dialog.")
             _import_from_file()
