@@ -243,6 +243,7 @@ class TestIsUpdateAvailable:
 # check_for_updates
 # ---------------------------------------------------------------------------
 
+
 def _make_app_instance():
     """Return a minimal fake app instance with a mock event loop and window."""
     loop = MagicMock()
@@ -262,6 +263,7 @@ def _make_app_instance():
 def _mock_toga_context():
     """Return a context manager that injects a MagicMock for the toga module."""
     import sys
+
     toga_mock = MagicMock()
     toga_mock.InfoDialog = MagicMock(return_value=MagicMock())
     toga_mock.QuestionDialog = MagicMock(return_value=MagicMock())
@@ -289,7 +291,10 @@ class TestCheckForUpdates:
     def test_shows_up_to_date_when_no_newer_version(self):
         app = _make_app_instance()
         with _mock_toga_context(), _sync_thread_patch():
-            with patch("bubble_mark.updater.get_latest_release", return_value=("0.1.0", None)):
+            with patch(
+                "bubble_mark.updater.get_latest_release",
+                return_value=("0.1.0", None),
+            ):
                 with patch("bubble_mark.updater.CURRENT_VERSION", "0.1.0"):
                     check_for_updates(app)
 
@@ -299,7 +304,10 @@ class TestCheckForUpdates:
     def test_shows_update_available_when_newer_version(self):
         app = _make_app_instance()
         with _mock_toga_context(), _sync_thread_patch():
-            with patch("bubble_mark.updater.get_latest_release", return_value=("9.9.9", "https://example.com/app.apk")):
+            with patch(
+                "bubble_mark.updater.get_latest_release",
+                return_value=("9.9.9", "https://example.com/app.apk"),
+            ):
                 check_for_updates(app)
 
         app.loop.create_task.assert_called_once()
@@ -307,7 +315,10 @@ class TestCheckForUpdates:
     def test_shows_error_when_network_fails(self):
         app = _make_app_instance()
         with _mock_toga_context(), _sync_thread_patch():
-            with patch("bubble_mark.updater.get_latest_release", return_value=(None, None)):
+            with patch(
+                "bubble_mark.updater.get_latest_release",
+                return_value=(None, None),
+            ):
                 check_for_updates(app)
 
         app.loop.create_task.assert_called_once()
@@ -325,7 +336,10 @@ class TestCheckForUpdates:
                 super().start()
 
         with _mock_toga_context():
-            with patch("bubble_mark.updater.get_latest_release", return_value=("0.1.0", None)):
+            with patch(
+                "bubble_mark.updater.get_latest_release",
+                return_value=("0.1.0", None),
+            ):
                 with patch("bubble_mark.updater.CURRENT_VERSION", "0.1.0"):
                     with patch("threading.Thread", _CapturingThread):
                         check_for_updates(app)
@@ -344,9 +358,15 @@ class TestCheckForUpdates:
         app.loop.create_task.side_effect = lambda coro: captured_coro.append(coro)
 
         with _mock_toga_context(), _sync_thread_patch():
-            with patch("bubble_mark.updater.get_latest_release", return_value=("9.9.9", "https://example.com/app.apk")):
+            with patch(
+                "bubble_mark.updater.get_latest_release",
+                return_value=("9.9.9", "https://example.com/app.apk"),
+            ):
                 with patch("bubble_mark.updater.CURRENT_VERSION", "0.1.0"):
-                    with patch("bubble_mark.updater.importlib.util.find_spec", return_value=None):
+                    with patch(
+                        "bubble_mark.updater.importlib.util.find_spec",
+                        return_value=None,
+                    ):
                         check_for_updates(app)
 
         assert len(captured_coro) == 1

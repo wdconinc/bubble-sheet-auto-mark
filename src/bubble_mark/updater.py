@@ -84,9 +84,7 @@ def is_update_available() -> tuple[bool, str | None]:
 
 def _schedule_coro(app_instance: Any, coro: Any) -> None:
     """Schedule an async *coro* on the app's event loop from a worker thread."""
-    app_instance.loop.call_soon_threadsafe(
-        lambda: app_instance.loop.create_task(coro)
-    )
+    app_instance.loop.call_soon_threadsafe(lambda: app_instance.loop.create_task(coro))
 
 
 def _handle_update_result(
@@ -201,6 +199,7 @@ def check_for_updates(app_instance: Any) -> None:
     * Network or API errors are surfaced as an information dialog rather than
       being swallowed silently.
     """
+
     def _check() -> None:
         latest_version, apk_url = get_latest_release()
         _handle_update_result(app_instance, latest_version, apk_url, silent=False)

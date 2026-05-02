@@ -87,6 +87,7 @@ class BubbleMarkApp(toga.App):
 
     def _check_for_updates(self) -> None:
         from bubble_mark.updater import check_for_updates
+
         check_for_updates(self)
 
     # ------------------------------------------------------------------
