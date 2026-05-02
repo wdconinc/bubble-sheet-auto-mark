@@ -65,6 +65,28 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #loading-msg { color: var(--muted); font-size: .95rem; text-align: center; max-width: 320px; }
     #loading-err { color: var(--danger); font-size: .875rem; text-align: center; max-width: 380px; }
+    #loading-details {
+      max-width: 380px; width: 100%; margin-top: 4px;
+    }
+    #loading-details summary {
+      cursor: pointer; color: var(--muted); font-size: .8rem; text-align: center;
+      list-style: none;
+    }
+    #loading-details summary::-webkit-details-marker { display: none; }
+    #loading-details summary::marker { display: none; }
+    #loading-log {
+      margin-top: 8px;
+      background: rgba(0,0,0,.04);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-family: monospace;
+      font-size: .75rem;
+      max-height: 150px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+    }
 
     /* ── Header ── */
     header {
@@ -255,6 +277,10 @@
   <div class="spinner"></div>
   <div id="loading-msg">Initialising Python runtime…</div>
   <div id="loading-err"></div>
+  <details id="loading-details">
+    <summary>Details</summary>
+    <div id="loading-log"></div>
+  </details>
 </div>
 
 <header>
@@ -532,6 +558,7 @@ const $ = (id) => document.getElementById(id);
 const overlay        = $('loading-overlay');
 const loadingMsg     = $('loading-msg');
 const loadingErr     = $('loading-err');
+const loadingLog     = $('loading-log');
 const btnUpload      = $('btn-upload');
 const fileInput      = $('file-input');
 const btnCamera      = $('btn-camera');
@@ -558,10 +585,10 @@ const btnClear       = $('btn-clear');
 async function init() {
   try {
     setLoadingMsg('Loading Python runtime (Pyodide)…');
-    pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX });
+    pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX, messageCallback: appendLog });
 
     setLoadingMsg('Loading NumPy and Pillow…');
-    await pyodide.loadPackage(['numpy', 'pillow']);
+    await pyodide.loadPackage(['numpy', 'pillow'], { messageCallback: appendLog });
 
     setLoadingMsg('Fetching image-processing modules…');
     await fetchPythonFiles();
@@ -611,6 +638,24 @@ async function fetchPythonFiles() {
 // ── UI helpers ───────────────────────────────────────────────────────────────
 
 function setLoadingMsg(msg) { loadingMsg.textContent = msg; }
+
+const MAX_LOG_LINES = 200;
+const SCROLL_THRESHOLD = 8;   // px tolerance for "at bottom" detection
+
+function appendLog(msg) {
+  const line = document.createElement('div');
+  line.textContent = msg;
+  loadingLog.appendChild(line);
+  // Trim oldest lines to cap DOM size.
+  while (loadingLog.childElementCount > MAX_LOG_LINES) {
+    loadingLog.removeChild(loadingLog.firstElementChild);
+  }
+  // Auto-scroll only when the user hasn't scrolled up manually.
+  const atBottom = loadingLog.scrollHeight - loadingLog.scrollTop - loadingLog.clientHeight < SCROLL_THRESHOLD;
+  if (atBottom) {
+    loadingLog.scrollTop = loadingLog.scrollHeight;
+  }
+}
 
 function enableUI() {
   btnUpload.disabled = false;
