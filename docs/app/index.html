@@ -1233,12 +1233,14 @@ function drawGridLines(region, numRows, numCols, strokeColor) {
   const secH = (y2 - y1) * refCanvas.height;
   if (secW < 4 || secH < 4) return;
 
-  const marginX = secW * 0.05;
-  const marginY = secH * 0.05;
+  // Use Math.floor to match Python's int() / floor-division rounding so that
+  // the grid lines land on the same pixel positions as the actual detector.
+  const marginX = Math.floor(secW * 0.05);
+  const marginY = Math.floor(secH * 0.05);
   const usableW = secW - 2 * marginX;
   const usableH = secH - 2 * marginY;
-  const cellW   = usableW / numCols;
-  const cellH   = usableH / numRows;
+  const cellW   = Math.floor(usableW / numCols);
+  const cellH   = Math.floor(usableH / numRows);
   const x0 = rx + marginX;
   const y0 = ry + marginY;
 
