@@ -459,7 +459,40 @@
             <span style="font-weight:400;color:var(--muted)"> — digits 1–5 or letters A–E; leave blank to skip scoring</span>
           </label>
           <input type="text" id="answer-key" placeholder="e.g. 134521345213452…">
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px;flex-wrap:wrap">
+            <button class="btn-ghost" id="btn-scan-qr" type="button" style="font-size:.8rem;padding:4px 10px">
+              📷 Scan QR Code
+            </button>
+            <input type="file" id="qr-file-input" accept="image/*" hidden>
+            <label for="qr-shuffle" style="font-weight:400;font-size:.85rem;color:var(--text);white-space:nowrap">
+              Shuffle&nbsp;integer:
+            </label>
+            <input type="number" id="qr-shuffle" value="0" min="0" step="1"
+                   title="Seed used to unshuffle the QR payload (0 = no shuffle)"
+                   style="width:80px">
+            <span style="font-size:.75rem;color:var(--muted)">
+              (<a href="https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle"
+                  target="_blank" rel="noopener noreferrer">shuffle algorithm</a>)
+            </span>
+          </div>
         </div>
+      </div>
+
+      <!-- ── QR camera viewfinder ── -->
+      <div id="qr-camera-section" style="display:none;margin-top:10px">
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:6px">
+          Point the camera at a QR code containing the answer key.
+        </p>
+        <div style="position:relative;display:inline-block">
+          <video id="qr-camera-video" autoplay playsinline muted
+                 style="max-width:100%;border-radius:var(--radius);background:#000"></video>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn-primary" id="btn-qr-capture" type="button">📸 Capture &amp; Decode</button>
+          <button class="btn-ghost" id="btn-qr-stop-camera" type="button">⏹ Stop Camera</button>
+          <button class="btn-ghost" id="btn-qr-upload" type="button">📁 Upload QR Image</button>
+        </div>
+        <div id="qr-status" style="margin-top:6px;font-size:.85rem;color:var(--muted)"></div>
       </div>
 
       <!-- ── Reference sheet ── -->
@@ -1688,6 +1721,7 @@ function saveSettings() {
       fillThreshold:        $('fill-threshold').value,
       answerKey:            $('answer-key').value,
       referenceColorChannel: $('ref-color-channel').value,
+      qrShuffle:            $('qr-shuffle').value,
     }));
   } catch (_) {}
 }
@@ -1773,6 +1807,7 @@ function restoreSettings() {
     if (s.fillThreshold         != null) $('fill-threshold').value   = s.fillThreshold;
     if (s.answerKey             != null) $('answer-key').value       = s.answerKey;
     if (s.referenceColorChannel != null) $('ref-color-channel').value = s.referenceColorChannel;
+    if (s.qrShuffle             != null) $('qr-shuffle').value        = s.qrShuffle;
   } catch (_) {}
 }
 
@@ -3393,10 +3428,172 @@ $('settings-toggle').addEventListener('click', () => {
   toggle.setAttribute('aria-expanded', String(!isHidden));
 });
 
+// ── QR Code scanning ─────────────────────────────────────────────────────────
+
+/**
+ * Fisher–Yates unshuffle using a 32-bit LCG (Numerical Recipes parameters).
+ * Mirrors _unshuffle_answers() in bubble_mark/models/answer_key.py.
+ * seed=0 → returns the string unchanged.
+ * Uses BigInt arithmetic to avoid float64 precision loss in the LCG.
+ * See https://en.wikipedia.org/wiki/Fisher%E2%80%93Yates_shuffle
+ */
+function unshuffleAnswersBigInt(answers, seed) {
+  seed = BigInt(seed) & 0xFFFFFFFFn;
+  if (seed === 0n) return answers;
+  const n = answers.length;
+  if (n <= 1) return answers;
+
+  const A = 1664525n, C = 1013904223n, M = 4294967296n;  // 2**32
+
+  let state = seed;
+  const lcgVals = [];
+  for (let k = 0; k < n - 1; k++) {
+    state = (A * state + C) % M;
+    lcgVals.push(Number(state));
+  }
+
+  const result = answers.split('');
+  for (let i = 1; i < n; i++) {
+    const j = lcgVals[n - 1 - i] % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result.join('');
+}
+
+let qrCameraStream = null;
+const qrCameraSection = $('qr-camera-section');
+const qrCameraVideo   = $('qr-camera-video');
+const qrStatus        = $('qr-status');
+const qrFileInput     = $('qr-file-input');
+
+function setQrStatus(msg, isError) {
+  qrStatus.textContent = msg;
+  qrStatus.style.color = isError ? 'var(--danger)' : 'var(--muted)';
+}
+
+function applyQrResult(rawText) {
+  const rawSeed = ($('qr-shuffle').value || '0').trim();
+  const shuffle = BigInt(rawSeed.match(/^\d+$/) ? rawSeed : '0') & 0xFFFFFFFFn;
+  const decoded = unshuffleAnswersBigInt(rawText.trim(), shuffle);
+  $('answer-key').value = decoded;
+  saveSettings();
+  setQrStatus(`✓ Answer key loaded (${decoded.length} answers, shuffle=${shuffle}).`);
+}
+
+async function decodeQrFromImageData(imageData) {
+  if (!('BarcodeDetector' in window)) {
+    setQrStatus('BarcodeDetector not supported in this browser. QR scanning requires Chrome or Edge.', true);
+    return false;
+  }
+  try {
+    const detector = new BarcodeDetector({ formats: ['qr_code'] });
+    const codes = await detector.detect(imageData);
+    if (codes.length === 0) {
+      setQrStatus('No QR code detected. Try again or upload the QR image.', true);
+      return false;
+    }
+    applyQrResult(codes[0].rawValue);
+    return true;
+  } catch (err) {
+    setQrStatus(`QR decode error: ${err.message}`, true);
+    return false;
+  }
+}
+
+async function decodeQrFromFile(file) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = async () => {
+      const canvas = document.createElement('canvas');
+      canvas.width  = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      const ok = await decodeQrFromImageData(canvas);
+      resolve(ok);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(false); };
+    img.src = url;
+  });
+}
+
+function stopQrCamera() {
+  if (qrCameraStream) {
+    qrCameraStream.getTracks().forEach((t) => t.stop());
+    qrCameraStream = null;
+  }
+  qrCameraVideo.srcObject = null;
+  qrCameraSection.style.display = 'none';
+}
+
+async function startQrCamera() {
+  stopQrCamera();
+  if (!('BarcodeDetector' in window)) {
+    setQrStatus('BarcodeDetector API not available. QR scanning requires Chrome or Edge.', true);
+    qrCameraSection.style.display = 'block';
+    return;
+  }
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setQrStatus('Camera not available (requires a secure context or is not supported).', true);
+    qrCameraSection.style.display = 'block';
+    return;
+  }
+  try {
+    qrCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    qrCameraVideo.srcObject = qrCameraStream;
+    qrCameraSection.style.display = 'block';
+    setQrStatus('Camera ready — point at a QR code and press Capture & Decode.');
+  } catch (err) {
+    setQrStatus(`Camera error: ${err.message}`, true);
+    qrCameraSection.style.display = 'block';
+  }
+}
+
+$('btn-scan-qr').addEventListener('click', () => startQrCamera());
+
+$('btn-qr-capture').addEventListener('click', async () => {
+  if (!qrCameraStream) {
+    setQrStatus('Camera is not running.', true);
+    return;
+  }
+  const video = qrCameraVideo;
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth  || 640;
+  canvas.height = video.videoHeight || 480;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  setQrStatus('Decoding…');
+  await decodeQrFromImageData(canvas);
+});
+
+$('btn-qr-stop-camera').addEventListener('click', () => {
+  stopQrCamera();
+  setQrStatus('Camera stopped.');
+});
+
+$('btn-qr-upload').addEventListener('click', () => qrFileInput.click());
+
+// Disable both QR buttons (and the upload label) if BarcodeDetector is unavailable.
+if (!('BarcodeDetector' in window)) {
+  ['btn-scan-qr', 'btn-qr-upload'].forEach((id) => {
+    const el = $(id);
+    el.disabled = true;
+    el.title = 'Requires BarcodeDetector API (Chrome / Edge)';
+  });
+}
+
+qrFileInput.addEventListener('change', async () => {
+  const file = qrFileInput.files[0];
+  if (!file) return;
+  setQrStatus('Decoding QR image…');
+  await decodeQrFromFile(file);
+  qrFileInput.value = '';
+});
+
 // ── Start ────────────────────────────────────────────────────────────────────
 
 // Persist settings whenever any field changes.
-['num-questions', 'num-choices', 'num-id-digits', 'fill-threshold', 'answer-key', 'ref-color-channel'].forEach((id) => {
+['num-questions', 'num-choices', 'num-id-digits', 'fill-threshold', 'answer-key', 'ref-color-channel', 'qr-shuffle'].forEach((id) => {
   $(id).addEventListener('input', saveSettings);
 });
 

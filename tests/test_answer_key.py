@@ -104,3 +104,90 @@ class TestSaveLoadJson:
         with open(path) as f:
             data = json.load(f)
         assert data["answers"] == "123"
+
+
+class TestShuffle:
+    """Tests for the module-level _shuffle_answers / _unshuffle_answers helpers."""
+
+    def _shuffle(self, answers, seed):
+        from bubble_mark.models.answer_key import _shuffle_answers
+
+        return _shuffle_answers(answers, seed)
+
+    def _unshuffle(self, answers, seed):
+        from bubble_mark.models.answer_key import _unshuffle_answers
+
+        return _unshuffle_answers(answers, seed)
+
+    def test_seed_zero_is_identity(self):
+        assert self._shuffle("12345", 0) == "12345"
+
+    def test_unshuffle_seed_zero_is_identity(self):
+        assert self._unshuffle("12345", 0) == "12345"
+
+    def test_round_trip(self):
+        original = "13524"
+        shuffled = self._shuffle(original, 42)
+        assert self._unshuffle(shuffled, 42) == original
+
+    def test_round_trip_long(self):
+        # All-unique characters so inequality assertions are unambiguous
+        original = "ABCDEFGHIJKLMNOPQRSTUVWXY"
+        shuffled = self._shuffle(original, 7)
+        assert shuffled != original  # non-trivial permutation for seed != 0
+        assert self._unshuffle(shuffled, 42) != original  # wrong seed doesn't work
+        assert self._unshuffle(shuffled, 7) == original
+
+    def test_shuffle_changes_order(self):
+        original = "12345"
+        shuffled = self._shuffle(original, 1)
+        # Shuffled must be a permutation of the same characters
+        assert sorted(shuffled) == sorted(original)
+        # For a non-zero seed with at least 2 elements it should differ
+        # (seed 1 confirmed here)
+        assert shuffled != original
+
+    def test_single_char_unchanged(self):
+        assert self._shuffle("1", 99) == "1"
+        assert self._unshuffle("1", 99) == "1"
+
+    def test_empty_string_unchanged(self):
+        assert self._shuffle("", 5) == ""
+        assert self._unshuffle("", 5) == ""
+
+    def test_different_seeds_give_different_results(self):
+        original = "12345"
+        assert self._shuffle(original, 1) != self._shuffle(original, 2)
+
+    def test_round_trip_with_letters(self):
+        """AnswerKey normalises letters; shuffle should work on the raw string."""
+        original = "ABCDE"
+        shuffled = self._shuffle(original, 3)
+        unshuffled = self._unshuffle(shuffled, 3)
+        assert unshuffled == original
+
+
+class TestFromQrString:
+    def test_no_shuffle(self):
+        key = AnswerKey.from_qr_string("12345")
+        assert key.answers == "12345"
+
+    def test_shuffled_round_trip(self):
+        from bubble_mark.models.answer_key import _shuffle_answers
+
+        original = "13524"
+        shuffled = _shuffle_answers(original, 7)
+        key = AnswerKey.from_qr_string(shuffled, shuffle=7)
+        assert key.answers == original
+
+    def test_strips_whitespace(self):
+        key = AnswerKey.from_qr_string("  12345  ", shuffle=0)
+        assert key.answers == "12345"
+
+    def test_name_propagated(self):
+        key = AnswerKey.from_qr_string("12345", shuffle=0, name="quiz")
+        assert key.name == "quiz"
+
+    def test_letters_normalised(self):
+        key = AnswerKey.from_qr_string("ABCDE", shuffle=0)
+        assert key.answers == "12345"
