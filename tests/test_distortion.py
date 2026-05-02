@@ -7,8 +7,10 @@ import pytest
 
 import bubble_mark.processing.distortion as _dist_mod
 from bubble_mark.processing.distortion import (
+    _remap_numpy,
     apply_homography,
     correct_distortion_from_lines,
+    correct_distortion_from_polylines,
     estimate_distortion_from_reference,
     find_intersection,
 )
@@ -18,6 +20,102 @@ from bubble_mark.processing.distortion import (
 def no_cv2(monkeypatch):
     """Force the pure NumPy/Pillow fallback paths."""
     monkeypatch.setattr(_dist_mod, "_HAVE_CV2", False)
+
+
+# ---------------------------------------------------------------------------
+# _remap_numpy
+# ---------------------------------------------------------------------------
+
+
+class TestRemapNumpy:
+    """Tests for the pure-NumPy bilinear remap helper."""
+
+    def _identity_maps(self, height, width):
+        """Return (map_x, map_y) that sample the source at integer coords."""
+        xs = np.arange(width, dtype=np.float32)
+        ys = np.arange(height, dtype=np.float32)
+        map_x, map_y = np.meshgrid(xs, ys)
+        return map_x, map_y
+
+    def test_identity_remap_bgr(self):
+        """An identity map should return a pixel-exact copy."""
+        height, width, channels = 10, 12, 3
+        rng = np.random.RandomState(0)
+        img = rng.randint(0, 256, (height, width, channels), dtype=np.uint8)
+        map_x, map_y = self._identity_maps(height, width)
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, img)
+
+    def test_identity_remap_grayscale(self):
+        """Identity remap on a grayscale image should return a pixel-exact copy."""
+        height, width = 8, 9
+        rng = np.random.RandomState(1)
+        img = rng.randint(0, 256, (height, width), dtype=np.uint8)
+        map_x, map_y = self._identity_maps(height, width)
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, img)
+
+    def test_border_pixel_has_correct_value(self):
+        """Sampling exactly at the last column/row must not return black."""
+        # 4-pixel wide image; pixels at x=3 (last column) should be preserved.
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        img[:, 3] = 150  # set last column to a distinct value
+        # Sample every output pixel at x=3 exactly (right border).
+        map_x = np.full((4, 4), 3.0, dtype=np.float32)
+        map_y = np.arange(4, dtype=np.float32)[:, np.newaxis].repeat(4, axis=1)
+        result = _remap_numpy(img, map_x, map_y)
+        # Every output pixel should be 150, not 0 (the old zero-weight bug).
+        np.testing.assert_array_equal(result, np.full((4, 4, 3), 150, dtype=np.uint8))
+
+    def test_border_row_pixel_has_correct_value(self):
+        """Sampling exactly at the last row must not return black."""
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        img[3, :] = 130  # set last row to a distinct value
+        map_x = np.arange(4, dtype=np.float32)[np.newaxis, :].repeat(4, axis=0)
+        map_y = np.full((4, 4), 3.0, dtype=np.float32)
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, np.full((4, 4, 3), 130, dtype=np.uint8))
+
+    def test_out_of_bounds_is_zero(self):
+        """Samples outside [0, W-1] × [0, H-1] must produce zero (BORDER_CONSTANT)."""
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        # map_x = -1 for every pixel → all out of bounds.
+        map_x = np.full((4, 4), -1.0, dtype=np.float32)
+        map_y = self._identity_maps(4, 4)[1]
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, np.zeros((4, 4, 3), dtype=np.uint8))
+
+    def test_out_of_bounds_right_is_zero(self):
+        """Samples at x > iw-1 must produce zero."""
+        img = np.full((4, 4, 3), 200, dtype=np.uint8)
+        map_x = np.full((4, 4), 4.0, dtype=np.float32)  # iw=4, so x=4 OOB
+        map_y = self._identity_maps(4, 4)[1]
+        result = _remap_numpy(img, map_x, map_y)
+        np.testing.assert_array_equal(result, np.zeros((4, 4, 3), dtype=np.uint8))
+
+    def test_partial_out_of_bounds(self):
+        """Only in-bounds pixels get interpolated; out-of-bounds are zero."""
+        img = np.full((4, 4, 3), 100, dtype=np.uint8)
+        map_x, map_y = self._identity_maps(4, 4)
+        # Force the first column out of bounds.
+        map_x[:, 0] = -1.0
+        result = _remap_numpy(img, map_x, map_y)
+        # First column must be 0; the rest must be 100.
+        np.testing.assert_array_equal(result[:, 0], np.zeros((4, 3), dtype=np.uint8))
+        np.testing.assert_array_equal(
+            result[:, 1:], np.full((4, 3, 3), 100, dtype=np.uint8)
+        )
+
+    def test_half_pixel_bilinear(self):
+        """Sampling at the half-pixel boundary between two columns averages them."""
+        # 1×2 image: col 0 = 0, col 1 = 100
+        img = np.array([[[0, 0, 0], [100, 100, 100]]], dtype=np.uint8)  # (1,2,3)
+        map_x = np.array([[0.5]], dtype=np.float32)
+        map_y = np.array([[0.0]], dtype=np.float32)
+        result = _remap_numpy(img, map_x, map_y)
+        # Expected: 50 (bilinear average)
+        expected = np.array([[[50, 50, 50]]], dtype=np.uint8)
+        np.testing.assert_array_equal(result, expected)
 
 
 # ---------------------------------------------------------------------------
@@ -224,3 +322,116 @@ class TestApplyHomography:
         H[1, 2] = 3  # shift down by 3
         result = apply_homography(img, H)
         assert result.shape == img.shape
+
+
+# ---------------------------------------------------------------------------
+# correct_distortion_from_polylines
+# ---------------------------------------------------------------------------
+
+
+class TestCorrectDistortionFromPolylines:
+    """Tests for the bilinear Coons patch polyline warp."""
+
+    @staticmethod
+    def _rect_polylines(x1=50, y1=50, x2=350, y2=450, pts_per_edge=2):
+        """Return four polylines that form a rectangle (optionally subdivided)."""
+        n = pts_per_edge
+        top = [[x1 + (x2 - x1) * i / (n - 1), y1] for i in range(n)]
+        bottom = [[x1 + (x2 - x1) * i / (n - 1), y2] for i in range(n)]
+        left = [[x1, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
+        right = [[x2, y1 + (y2 - y1) * i / (n - 1)] for i in range(n)]
+        return {"top": top, "bottom": bottom, "left": left, "right": right}
+
+    def test_returns_ndarray_for_rect(self):
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+
+    def test_output_is_3d_bgr(self):
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert result.ndim == 3
+        assert result.shape[2] == 3
+
+    def test_output_size_derived_from_edge_lengths(self):
+        # Rectangle 200×300 pixels
+        polys = self._rect_polylines(x1=0, y1=0, x2=200, y2=300)
+        img = np.full((400, 300, 3), 128, dtype=np.uint8)
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert result.shape[1] == 200  # width from top/bottom arc-length
+        assert result.shape[0] == 300  # height from left/right arc-length
+
+    def test_missing_edge_returns_none(self):
+        img = np.full((200, 200, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        del polys["right"]
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is None
+
+    def test_single_point_edge_returns_none(self):
+        img = np.full((200, 200, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        polys["top"] = [[50, 50]]  # only one point
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is None
+
+    def test_curved_top_edge_does_not_crash(self):
+        """A slightly curved top edge should still produce a valid image."""
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        # Top edge curves slightly upward in the middle
+        polys = {
+            "top": [[50, 50], [200, 30], [350, 50]],
+            "bottom": [[50, 450], [200, 450], [350, 450]],
+            "left": [[50, 50], [50, 250], [50, 450]],
+            "right": [[350, 50], [350, 250], [350, 450]],
+        }
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert result.ndim == 3
+
+    def test_no_cv2_fallback_returns_valid_image(self, no_cv2):
+        img = np.full((500, 400, 3), 200, dtype=np.uint8)
+        polys = self._rect_polylines()
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+
+    def test_grayscale_input(self):
+        img = np.full((300, 400), 180, dtype=np.uint8)
+        polys = self._rect_polylines(x1=20, y1=20, x2=380, y2=280)
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        assert result.ndim == 2
+
+    def test_two_point_edge_equivalent_to_straight_line(self):
+        """With 2-point (straight) polylines the result should resemble the
+        perspective-transform output of the same rectangle."""
+        img = np.zeros((500, 400, 3), dtype=np.uint8)
+        # Draw a distinctive pattern inside the rectangle
+        img[50:450, 50:350] = 128
+        img[100:400, 100:300] = 200
+        polys = self._rect_polylines(x1=50, y1=50, x2=350, y2=450)
+        result = correct_distortion_from_polylines(img, polys)
+        assert result is not None
+        # Output must be non-empty and have reasonable pixel values
+        assert result.shape[0] > 0 and result.shape[1] > 0
+        assert result.max() > 50  # not all black
+
+    def test_subdivided_rect_same_as_two_point(self):
+        """Subdividing a straight edge into more points should give the same
+        output (within rounding) as the 2-point version."""
+        img = np.random.RandomState(0).randint(0, 256, (500, 400, 3), dtype=np.uint8)
+        polys_2 = self._rect_polylines(pts_per_edge=2)
+        polys_5 = self._rect_polylines(pts_per_edge=5)
+        r2 = correct_distortion_from_polylines(img, polys_2)
+        r5 = correct_distortion_from_polylines(img, polys_5)
+        assert r2 is not None and r5 is not None
+        assert r2.shape == r5.shape
+        # Results must be pixel-close (allow small bilinear interpolation diffs)
+        assert np.mean(np.abs(r2.astype(np.int32) - r5.astype(np.int32))) < 2
