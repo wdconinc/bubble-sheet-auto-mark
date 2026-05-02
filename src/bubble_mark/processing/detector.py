@@ -75,6 +75,36 @@ class BubbleSheetDetector:
         normalised = resize_image(normalised, width=_SHEET_WIDTH, height=_SHEET_HEIGHT)
         return normalised
 
+    def answer_section_rect(
+        self, normalised_image: np.ndarray
+    ) -> tuple[int, int, int, int]:
+        """Return ``(x1, y1, x2, y2)`` bounding box of the answer section.
+
+        When :attr:`answer_region` is set the returned box reflects that
+        custom region; otherwise the built-in heuristic (top ~72 % of the
+        sheet) is used.
+        """
+        h, w = normalised_image.shape[:2]
+        if self.answer_region is not None:
+            rx1, ry1, rx2, ry2 = self.answer_region
+            return (int(w * rx1), int(h * ry1), int(w * rx2), int(h * ry2))
+        return (0, 0, w, int(h * 0.72))
+
+    def id_section_rect(
+        self, normalised_image: np.ndarray
+    ) -> tuple[int, int, int, int]:
+        """Return ``(x1, y1, x2, y2)`` bounding box of the student-ID section.
+
+        When :attr:`id_region` is set the returned box reflects that custom
+        region; otherwise the built-in heuristic (bottom ~26 % of the sheet)
+        is used.
+        """
+        h, w = normalised_image.shape[:2]
+        if self.id_region is not None:
+            rx1, ry1, rx2, ry2 = self.id_region
+            return (int(w * rx1), int(h * ry1), int(w * rx2), int(h * ry2))
+        return (0, int(h * 0.74), w, h)
+
     def locate_answer_bubbles(
         self, normalised_image: np.ndarray
     ) -> list[list[tuple[int, int, int, int]]]:

@@ -282,6 +282,160 @@ def perspective_transform(image: np.ndarray, contour: np.ndarray) -> np.ndarray:
     return np.array(result)
 
 
+# ---------------------------------------------------------------------------
+# Overlay / annotation helpers
+# ---------------------------------------------------------------------------
+
+
+def _draw_rect_np(
+    image: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: tuple,
+    thickness: int = 1,
+) -> None:
+    """Draw a rectangle outline on *image* in-place using NumPy indexing.
+
+    *x2* and *y2* are **exclusive** endpoints (Python/NumPy convention).
+    """
+    h, w = image.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return
+    c = np.array(color, dtype=np.uint8)
+    for t in range(thickness):
+        ty1 = min(y1 + t, y2 - 1)
+        ty2 = max(y2 - 1 - t, y1)
+        tx1 = min(x1 + t, x2 - 1)
+        tx2 = max(x2 - 1 - t, x1)
+        image[ty1, x1:x2] = c
+        image[ty2, x1:x2] = c
+        image[y1:y2, tx1] = c
+        image[y1:y2, tx2] = c
+
+
+def _fill_rect_np(
+    image: np.ndarray,
+    x1: int,
+    y1: int,
+    x2: int,
+    y2: int,
+    color: tuple,
+) -> None:
+    """Fill a rectangle on *image* in-place using NumPy indexing.
+
+    *x2* and *y2* are **exclusive** endpoints (Python/NumPy convention).
+    """
+    h, w = image.shape[:2]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w, x2), min(h, y2)
+    if x2 <= x1 or y2 <= y1:
+        return
+    image[y1:y2, x1:x2] = np.array(color, dtype=np.uint8)
+
+
+def draw_overlay(
+    image: np.ndarray,
+    answer_section_rect: tuple[int, int, int, int],
+    id_section_rect: tuple[int, int, int, int],
+    all_answer_bubbles: list[tuple[int, int, int, int]],
+    all_id_bubbles: list[tuple[int, int, int, int]],
+    filled_answer_bubbles: list[tuple[int, int, int, int]],
+    filled_id_bubbles: list[tuple[int, int, int, int]],
+) -> np.ndarray:
+    """Return a BGR copy of *image* with a grading overlay drawn on it.
+
+    The overlay visualises:
+
+    * **Page outline** – a green border around the entire image.
+    * **Answer section** – a blue bounding rectangle for the answer region.
+    * **ID section** – a purple bounding rectangle for the student-ID region.
+    * **All bubble outlines** – light-gray rectangles for every bubble cell.
+    * **Filled bubbles** – bright-green filled rectangles for identified
+      filled bubbles.
+
+    Parameters
+    ----------
+    image:
+        Normalised (perspective-corrected, resized) sheet image in BGR format.
+    answer_section_rect:
+        ``(x1, y1, x2, y2)`` bounding box of the answer section.
+    id_section_rect:
+        ``(x1, y1, x2, y2)`` bounding box of the ID section.
+    all_answer_bubbles:
+        Flat list of ``(x, y, w, h)`` for every answer bubble region.
+    all_id_bubbles:
+        Flat list of ``(x, y, w, h)`` for every ID bubble region.
+    filled_answer_bubbles:
+        Subset of *all_answer_bubbles* identified as filled.
+    filled_id_bubbles:
+        Subset of *all_id_bubbles* identified as filled.
+
+    Returns
+    -------
+    np.ndarray
+        A new BGR ``uint8`` array with the overlay applied.
+    """
+    # Ensure output is a 3-channel BGR uint8 copy
+    if image.ndim == 2 or (image.ndim == 3 and image.shape[2] == 1):
+        gray = image if image.ndim == 2 else image[:, :, 0]
+        if _HAVE_CV2:
+            out = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+        else:
+            out = np.stack([gray, gray, gray], axis=-1).astype(np.uint8)
+    else:
+        out = image.copy().astype(np.uint8)
+
+    h, w = out.shape[:2]
+
+    # Colours (BGR)
+    _GREEN = (0, 200, 0)
+    _BLUE = (200, 80, 0)
+    _PURPLE = (180, 0, 180)
+    _GRAY = (160, 160, 160)
+    _FILL_GREEN = (0, 200, 50)
+
+    ax1, ay1, ax2, ay2 = answer_section_rect
+    ix1, iy1, ix2, iy2 = id_section_rect
+
+    if _HAVE_CV2:
+        # cv2.rectangle uses inclusive endpoints, so we subtract 1 from the
+        # exclusive upper-right corner to match the exclusive-convention callers.
+        # Page outline
+        cv2.rectangle(out, (0, 0), (w - 1, h - 1), _GREEN, 4)
+        # Section rectangles
+        cv2.rectangle(out, (ax1, ay1), (ax2 - 1, ay2 - 1), _BLUE, 2)
+        cv2.rectangle(out, (ix1, iy1), (ix2 - 1, iy2 - 1), _PURPLE, 2)
+        # All bubble outlines (answer + ID)
+        for x, y, bw, bh in all_answer_bubbles:
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _GRAY, 1)
+        for x, y, bw, bh in all_id_bubbles:
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _GRAY, 1)
+        # Filled bubbles
+        for x, y, bw, bh in filled_answer_bubbles:
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _FILL_GREEN, -1)
+        for x, y, bw, bh in filled_id_bubbles:
+            cv2.rectangle(out, (x, y), (x + bw - 1, y + bh - 1), _FILL_GREEN, -1)
+    else:
+        # Pure NumPy fallback — uses exclusive (x2, y2) endpoints throughout.
+        _draw_rect_np(out, 0, 0, w, h, _GREEN, thickness=4)
+        _draw_rect_np(out, ax1, ay1, ax2, ay2, _BLUE, thickness=2)
+        _draw_rect_np(out, ix1, iy1, ix2, iy2, _PURPLE, thickness=2)
+        for x, y, bw, bh in all_answer_bubbles:
+            _draw_rect_np(out, x, y, x + bw, y + bh, _GRAY, thickness=1)
+        for x, y, bw, bh in all_id_bubbles:
+            _draw_rect_np(out, x, y, x + bw, y + bh, _GRAY, thickness=1)
+        for x, y, bw, bh in filled_answer_bubbles:
+            _fill_rect_np(out, x, y, x + bw, y + bh, _FILL_GREEN)
+        for x, y, bw, bh in filled_id_bubbles:
+            _fill_rect_np(out, x, y, x + bw, y + bh, _FILL_GREEN)
+
+    return out
+
+
 def resize_image(
     image: np.ndarray,
     width: Optional[int] = None,

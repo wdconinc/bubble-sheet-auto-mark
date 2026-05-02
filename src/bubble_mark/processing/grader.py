@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 from bubble_mark.processing.analyzer import BubbleAnalyzer
 from bubble_mark.processing.detector import BubbleSheetDetector
+from bubble_mark.processing.image_utils import draw_overlay
 
 
 class BubbleSheetGrader:
@@ -45,26 +46,53 @@ class BubbleSheetGrader:
         """Run the full pipeline on *image* and return a :class:`GradeResult`.
 
         Returns *None* if the sheet cannot be detected or processed.
-        """
-        # Import here to avoid circular imports at module load time
 
+        The returned :class:`~bubble_mark.models.grade_result.GradeResult`
+        includes an :attr:`~bubble_mark.models.grade_result.GradeResult.annotated_image`
+        attribute: a BGR copy of the normalised sheet with an overlay drawn on
+        it that shows the page outline, answer and ID section regions, all
+        bubble cells, and the filled bubbles that were identified.
+        """
         normalised = self.detector.detect(image)
         if normalised is None:
             return None
 
         # Detect student ID
         id_bubbles = self.detector.locate_id_bubbles(normalised)
-        student_id = "".join(
-            self.analyzer.analyze_id_column(normalised, col) for col in id_bubbles
-        )
+        id_chars: list[str] = []
+        filled_id_regions: list = []
+        for col in id_bubbles:
+            ch, filled = self.analyzer.analyze_id_column_with_filled(normalised, col)
+            id_chars.append(ch)
+            filled_id_regions.extend(filled)
+        student_id = "".join(id_chars)
 
         # Detect answers
         answer_rows = self.detector.locate_answer_bubbles(normalised)
-        detected_answers = "".join(
-            self.analyzer.analyze_answer_row(normalised, row) for row in answer_rows
+        answer_chars: list[str] = []
+        filled_answer_regions: list = []
+        for row in answer_rows:
+            ch, filled = self.analyzer.analyze_answer_row_with_filled(normalised, row)
+            answer_chars.append(ch)
+            filled_answer_regions.extend(filled)
+        detected_answers = "".join(answer_chars)
+
+        result = self.grade_answers(detected_answers, student_id)
+
+        # Build overlay image ---------------------------------------------------
+        all_answer_bubbles = [b for row in answer_rows for b in row]
+        all_id_bubbles = [b for col in id_bubbles for b in col]
+        result.annotated_image = draw_overlay(
+            normalised,
+            answer_section_rect=self.detector.answer_section_rect(normalised),
+            id_section_rect=self.detector.id_section_rect(normalised),
+            all_answer_bubbles=all_answer_bubbles,
+            all_id_bubbles=all_id_bubbles,
+            filled_answer_bubbles=filled_answer_regions,
+            filled_id_bubbles=filled_id_regions,
         )
 
-        return self.grade_answers(detected_answers, student_id)
+        return result
 
     def grade_answers(self, detected_answers: str, student_id: str) -> "GradeResult":
         """Build a :class:`GradeResult` from pre-detected *detected_answers*.

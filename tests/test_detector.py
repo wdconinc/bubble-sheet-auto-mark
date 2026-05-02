@@ -181,3 +181,63 @@ class TestLocateIdBubbles:
                 assert y >= id_section_start, (
                     f"ID bubble y={y} is above custom region start {id_section_start}"
                 )
+
+
+class TestSectionRects:
+    def test_answer_section_rect_shape(self):
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        rect = d.answer_section_rect(normalised)
+        assert len(rect) == 4
+        x1, y1, x2, y2 = rect
+        assert x1 == 0
+        assert y1 == 0
+        assert x2 == normalised.shape[1]
+        assert y2 == int(normalised.shape[0] * 0.72)
+
+    def test_id_section_rect_shape(self):
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        rect = d.id_section_rect(normalised)
+        assert len(rect) == 4
+        x1, y1, x2, y2 = rect
+        assert x1 == 0
+        assert y1 == int(normalised.shape[0] * 0.74)
+        assert x2 == normalised.shape[1]
+        assert y2 == normalised.shape[0]
+
+    def test_answer_and_id_sections_do_not_overlap(self):
+        d = BubbleSheetDetector()
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        _, _, _, a_y2 = d.answer_section_rect(normalised)
+        _, i_y1, _, _ = d.id_section_rect(normalised)
+        assert a_y2 <= i_y1
+
+    def test_answer_section_rect_respects_custom_region(self):
+        """answer_section_rect should reflect the configured answer_region."""
+        region = [0.0, 0.0, 1.0, 0.6]
+        d = BubbleSheetDetector(answer_region=region)
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        h, w = normalised.shape[:2]
+        x1, y1, x2, y2 = d.answer_section_rect(normalised)
+        assert x1 == int(w * region[0])
+        assert y1 == int(h * region[1])
+        assert x2 == int(w * region[2])
+        assert y2 == int(h * region[3])
+
+    def test_id_section_rect_respects_custom_region(self):
+        """id_section_rect should reflect the configured id_region."""
+        region = [0.0, 0.74, 1.0, 1.0]
+        d = BubbleSheetDetector(id_region=region)
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        h, w = normalised.shape[:2]
+        x1, y1, x2, y2 = d.id_section_rect(normalised)
+        assert x1 == int(w * region[0])
+        assert y1 == int(h * region[1])
+        assert x2 == int(w * region[2])
+        assert y2 == int(h * region[3])

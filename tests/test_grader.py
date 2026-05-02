@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 
 from bubble_mark.models.grade_result import GradeResult
@@ -75,3 +76,34 @@ class TestGradeImage:
         sheet = create_blank_sheet()
         result = grader.grade_image(sheet)
         assert result.answer_key is grader.answer_key
+
+    def test_grade_image_annotated_image_attached(self, grader):
+        sheet = create_blank_sheet()
+        result = grader.grade_image(sheet)
+        assert result.annotated_image is not None
+
+    def test_grade_image_annotated_image_is_ndarray(self, grader):
+        sheet = create_blank_sheet()
+        result = grader.grade_image(sheet)
+        assert isinstance(result.annotated_image, np.ndarray)
+
+    def test_grade_image_annotated_image_is_bgr(self, grader):
+        sheet = create_blank_sheet()
+        result = grader.grade_image(sheet)
+        assert result.annotated_image.ndim == 3
+        assert result.annotated_image.shape[2] == 3
+
+    def test_grade_image_annotated_image_same_size_as_normalised(self, grader):
+        """Annotated image must match the normalised sheet dimensions (850×1100)."""
+        sheet = create_blank_sheet()
+        result = grader.grade_image(sheet)
+        assert result.annotated_image.shape[1] == 850
+        assert result.annotated_image.shape[0] == 1100
+
+    def test_grade_image_annotated_differs_from_blank_sheet(self, grader):
+        """The overlay must actually modify at least one pixel."""
+        sheet = create_blank_sheet()
+        result = grader.grade_image(sheet)
+        # The normalised blank sheet is all-white (255); overlay draws coloured
+        # borders so at least one pixel must differ from 255.
+        assert not np.all(result.annotated_image == 255)

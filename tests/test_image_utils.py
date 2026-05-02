@@ -9,6 +9,7 @@ import pytest
 import bubble_mark.processing.image_utils as _image_utils_mod
 from bubble_mark.processing.image_utils import (
     apply_threshold,
+    draw_overlay,
     find_page_contour,
     load_image,
     order_points,
@@ -305,3 +306,111 @@ class TestResizeImageNoCv2:
         img = np.zeros((100, 200, 3), dtype=np.uint8)
         result = resize_image(img)
         assert result.shape == img.shape
+
+
+# ---------------------------------------------------------------------------
+# draw_overlay
+# ---------------------------------------------------------------------------
+
+
+def _make_overlay_args(width: int = 200, height: int = 260):
+    """Build minimal but realistic arguments for draw_overlay."""
+    image = np.full((height, width, 3), 240, dtype=np.uint8)
+    answer_section_rect = (0, 0, width, int(height * 0.72))
+    id_section_rect = (0, int(height * 0.74), width, height)
+    # Two bubble rows, two columns each
+    all_answer_bubbles = [(10, 10, 20, 20), (40, 10, 20, 20)]
+    all_id_bubbles = [(10, 200, 15, 15), (35, 200, 15, 15)]
+    filled_answer = [(10, 10, 20, 20)]
+    filled_id = [(35, 200, 15, 15)]
+    return dict(
+        image=image,
+        answer_section_rect=answer_section_rect,
+        id_section_rect=id_section_rect,
+        all_answer_bubbles=all_answer_bubbles,
+        all_id_bubbles=all_id_bubbles,
+        filled_answer_bubbles=filled_answer,
+        filled_id_bubbles=filled_id,
+    )
+
+
+class TestDrawOverlay:
+    def test_returns_ndarray(self):
+        result = draw_overlay(**_make_overlay_args())
+        assert isinstance(result, np.ndarray)
+
+    def test_output_same_shape_as_input(self):
+        args = _make_overlay_args()
+        result = draw_overlay(**args)
+        assert result.shape == args["image"].shape
+
+    def test_output_is_bgr(self):
+        result = draw_overlay(**_make_overlay_args())
+        assert result.ndim == 3
+        assert result.shape[2] == 3
+
+    def test_does_not_modify_input(self):
+        args = _make_overlay_args()
+        original = args["image"].copy()
+        draw_overlay(**args)
+        np.testing.assert_array_equal(args["image"], original)
+
+    def test_filled_bubble_pixels_changed(self):
+        """Pixels inside a filled bubble region should differ from the input."""
+        args = _make_overlay_args()
+        original = args["image"].copy()
+        result = draw_overlay(**args)
+        x, y, bw, bh = args["filled_answer_bubbles"][0]
+        # At least some pixels inside the filled region changed
+        region_before = original[y : y + bh, x : x + bw]
+        region_after = result[y : y + bh, x : x + bw]
+        assert not np.array_equal(region_before, region_after)
+
+    def test_grayscale_input_converted_to_bgr(self):
+        args = _make_overlay_args()
+        args["image"] = np.full((260, 200), 200, dtype=np.uint8)
+        result = draw_overlay(**args)
+        assert result.ndim == 3
+        assert result.shape[2] == 3
+
+    def test_empty_bubble_lists(self):
+        args = _make_overlay_args()
+        args["all_answer_bubbles"] = []
+        args["all_id_bubbles"] = []
+        args["filled_answer_bubbles"] = []
+        args["filled_id_bubbles"] = []
+        result = draw_overlay(**args)
+        assert result.shape == args["image"].shape
+
+
+class TestDrawOverlayNoCv2:
+    def test_returns_ndarray(self, no_cv2):
+        result = draw_overlay(**_make_overlay_args())
+        assert isinstance(result, np.ndarray)
+
+    def test_output_same_shape_as_input(self, no_cv2):
+        args = _make_overlay_args()
+        result = draw_overlay(**args)
+        assert result.shape == args["image"].shape
+
+    def test_does_not_modify_input(self, no_cv2):
+        args = _make_overlay_args()
+        original = args["image"].copy()
+        draw_overlay(**args)
+        np.testing.assert_array_equal(args["image"], original)
+
+    def test_filled_bubble_pixels_changed(self, no_cv2):
+        args = _make_overlay_args()
+        original = args["image"].copy()
+        result = draw_overlay(**args)
+        x, y, bw, bh = args["filled_answer_bubbles"][0]
+        region_before = original[y : y + bh, x : x + bw]
+        region_after = result[y : y + bh, x : x + bw]
+        assert not np.array_equal(region_before, region_after)
+
+    def test_grayscale_input_converted_to_bgr(self, no_cv2):
+        args = _make_overlay_args()
+        args["image"] = np.full((260, 200), 200, dtype=np.uint8)
+        result = draw_overlay(**args)
+        assert result.ndim == 3
+        assert result.shape[2] == 3
