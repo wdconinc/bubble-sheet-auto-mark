@@ -9,7 +9,9 @@
     entirely in this browser tab.  No image or grade data is ever transmitted
     to any server.
   -->
-  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"></script>
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"
+          integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
+          crossorigin="anonymous"></script>
   <style>
     :root {
       --primary:       #2563eb;
@@ -106,8 +108,15 @@
       border-bottom: 1px solid var(--border);
       display: flex; align-items: center; justify-content: space-between;
       cursor: pointer; user-select: none;
+      /* Reset button defaults when used as a <button> element */
+      width: 100%; text-align: left; background: none;
+      border-top: none; border-left: none; border-right: none;
+      font: inherit; color: inherit;
     }
-    .card-head.static { cursor: default; }
+    .card-head:focus-visible {
+      outline: 2px solid var(--primary); outline-offset: -2px;
+    }
+    .card-head.static { cursor: default; pointer-events: none; }
     .card-head h2 { font-size: .95rem; font-weight: 600; display: flex; align-items: center; gap: 7px; }
     .chevron { font-size: .75rem; transition: transform .2s; }
     .collapsed .chevron { transform: rotate(-90deg); }
@@ -224,15 +233,15 @@
 <header>
   <h1>Bubble Sheet Auto-Mark</h1>
   <nav>
-    <a href="../" target="_blank">← Docs</a>
-    <a href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank">GitHub</a>
+    <a href="../" target="_blank" rel="noopener noreferrer">← Docs</a>
+    <a href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank" rel="noopener noreferrer">GitHub</a>
   </nav>
 </header>
 
 <div class="privacy-banner">
   🔒 <strong>Privacy-first:</strong>&nbsp;
   all image processing runs entirely in your browser via
-  <a href="https://pyodide.org" target="_blank">Pyodide</a> (Python&nbsp;3.12&nbsp;→&nbsp;WebAssembly).
+  <a href="https://pyodide.org" target="_blank" rel="noopener noreferrer">Pyodide</a> (Python&nbsp;3.12&nbsp;→&nbsp;WebAssembly).
   No image or grade data is ever sent to any server.
 </div>
 
@@ -240,10 +249,11 @@
 
   <!-- ── Settings card ── -->
   <div class="card">
-    <div class="card-head" id="settings-toggle">
+    <button class="card-head" id="settings-toggle"
+            type="button" aria-expanded="true" aria-controls="settings-body">
       <h2>⚙ Settings</h2>
-      <span class="chevron">▼</span>
-    </div>
+      <span class="chevron" aria-hidden="true">▼</span>
+    </button>
     <div class="card-body" id="settings-body">
       <div class="form-grid">
         <div class="field">
@@ -336,10 +346,10 @@
 </main>
 
 <footer>
-  <a href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank">Bubble Sheet Auto-Mark</a>
+  <a href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank" rel="noopener noreferrer">Bubble Sheet Auto-Mark</a>
   · Released under the
-  <a href="https://github.com/wdconinc/bubble-sheet-auto-mark/blob/main/LICENSE" target="_blank">MIT License</a>
-  · Powered by <a href="https://pyodide.org" target="_blank">Pyodide</a>
+  <a href="https://github.com/wdconinc/bubble-sheet-auto-mark/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+  · Powered by <a href="https://pyodide.org" target="_blank" rel="noopener noreferrer">Pyodide</a>
 </footer>
 
 <!-- ─────────────────────────────────────────────────────────────────────────
@@ -629,11 +639,21 @@ btnCamera.addEventListener('click', async () => {
 
 btnCapture.addEventListener('click', () => {
   if (!cameraStream) return;
+  const w = cameraVideo.videoWidth;
+  const h = cameraVideo.videoHeight;
+  if (!w || !h) {
+    setStatus('Camera frame not ready. Wait a moment and try again.', 'error');
+    return;
+  }
   const cap = document.createElement('canvas');
-  cap.width  = cameraVideo.videoWidth;
-  cap.height = cameraVideo.videoHeight;
+  cap.width  = w;
+  cap.height = h;
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
-  cap.toBlob((blob) => { stopCamera(); loadImageBlob(blob); }, 'image/jpeg', 0.92);
+  cap.toBlob((blob) => {
+    if (!blob) { setStatus('Failed to capture frame. Please try again.', 'error'); return; }
+    stopCamera();
+    loadImageBlob(blob);
+  }, 'image/jpeg', 0.92);
 });
 
 btnStopCam.addEventListener('click', stopCamera);
@@ -681,7 +701,7 @@ btnGrade.addEventListener('click', async () => {
       setStatus(
         scored
           ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
-          : `✓ Detected ${result.num_questions} answers. (No answer key — scoring skipped.)`,
+          : `✓ Detected ${result.answers.length} answers. (No answer key — scoring skipped.)`,
         'success'
       );
     }
@@ -699,7 +719,7 @@ function appendResultRow(r, idx) {
   const scored = r.score != null;
   const scoreTxt = scored ? `${(r.score * 100).toFixed(1)} %` : '–';
   const scoreCls = scored ? (r.score >= 0.6 ? 'good' : 'bad') : '';
-  const correctTxt = scored ? `${r.num_correct} / ${r.num_questions}` : `– / ${r.num_questions}`;
+  const correctTxt = scored ? `${r.num_correct} / ${r.num_questions}` : `– / ${r.answers.length}`;
 
   // Truncate long answer strings for display.
   const ans = r.answers || '';
@@ -757,6 +777,7 @@ $('settings-toggle').addEventListener('click', () => {
   const toggle  = $('settings-toggle');
   const isHidden = body.classList.toggle('hidden');
   toggle.classList.toggle('collapsed', isHidden);
+  toggle.setAttribute('aria-expanded', String(!isHidden));
 });
 
 // ── Start ────────────────────────────────────────────────────────────────────
