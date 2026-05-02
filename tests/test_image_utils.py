@@ -120,6 +120,16 @@ class TestApplyThreshold:
         # Corner pixels (bright background) must be background (0)
         assert binary[5, 5] == 0
 
+    def test_adaptive_invert_polarity(self):
+        # Small dark patch in mid-gray image: pixels clearly below their local
+        # mean → foreground with invert=True, background with invert=False.
+        img = np.full((100, 100, 3), 128, dtype=np.uint8)
+        img[45:55, 45:55] = 10  # dark patch
+        binary_inv = apply_threshold(img, method="adaptive", invert=True)
+        binary_fwd = apply_threshold(img, method="adaptive", invert=False)
+        assert binary_inv[50, 50] == 255  # dark patch → foreground with invert=True
+        assert binary_fwd[50, 50] == 0    # dark patch → background with invert=False
+
 
 # ---------------------------------------------------------------------------
 # order_points
@@ -284,6 +294,16 @@ class TestApplyThresholdNoCv2:
         assert binary.ndim == 2
         assert binary[50, 50] == 255
         assert binary[5, 5] == 0
+
+    def test_adaptive_invert_polarity(self, no_cv2):
+        # Small dark patch in mid-gray image: pixels clearly below their local
+        # mean → foreground with invert=True, background with invert=False.
+        img = np.full((100, 100, 3), 128, dtype=np.uint8)
+        img[45:55, 45:55] = 10  # dark patch
+        binary_inv = apply_threshold(img, method="adaptive", invert=True)
+        binary_fwd = apply_threshold(img, method="adaptive", invert=False)
+        assert binary_inv[50, 50] == 255  # dark patch → foreground with invert=True
+        assert binary_fwd[50, 50] == 0    # dark patch → background with invert=False
 
 
 class TestFindPageContourNoCv2:

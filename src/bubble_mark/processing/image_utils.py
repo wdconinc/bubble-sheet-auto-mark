@@ -172,9 +172,12 @@ def apply_threshold(
             Image.fromarray(gray).filter(ImageFilter.GaussianBlur(radius=5))
         )
         diff = gray.astype(np.int16) - blurred.astype(np.int16)
-        # invert=True:  pixels darker than local mean by >2 → foreground
-        # invert=False: pixels brighter than local mean by >2 → foreground
-        condition = diff < -2 if invert else diff > 2
+        # Match cv2 THRESH_BINARY_INV / THRESH_BINARY with C=2:
+        #   THRESH_BINARY_INV (invert=True):  foreground when gray <= mean - C
+        #                                     ↔ diff < -C  (i.e. diff < -2)
+        #   THRESH_BINARY     (invert=False): foreground when gray >  mean - C
+        #                                     ↔ diff > -C  (i.e. diff > -2)
+        condition = diff < -2 if invert else diff > -2
         return np.where(condition, np.uint8(255), np.uint8(0))
     t = _otsu_threshold(gray)
     # Match cv2 convention: THRESH_BINARY_INV → foreground when gray <= thresh;
