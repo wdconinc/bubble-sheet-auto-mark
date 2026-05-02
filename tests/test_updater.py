@@ -261,10 +261,12 @@ class TestCheckForUpdates:
 
     def test_spawns_daemon_thread(self):
         """check_for_updates must not block the UI thread."""
+        import threading as _threading
+
         app = _make_app_instance()
         spawned: list = []
 
-        class _CapturingThread(__import__("threading").Thread):
+        class _CapturingThread(_threading.Thread):
             def start(self):
                 spawned.append(self)
                 super().start()

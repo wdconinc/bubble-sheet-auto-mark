@@ -9,6 +9,7 @@ import threading
 import urllib.error
 import urllib.request
 import webbrowser
+from typing import Any
 
 try:
     from bubble_mark import __version__ as CURRENT_VERSION
@@ -108,7 +109,7 @@ def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
     threading.Thread(target=_check, daemon=True).start()
 
 
-def check_for_updates(app_instance) -> None:  # noqa: ANN001
+def check_for_updates(app_instance: Any) -> None:
     """Explicitly check for updates and show feedback to the user.
 
     Unlike :func:`check_and_prompt_update`, this function is intended to be
