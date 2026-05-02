@@ -128,9 +128,9 @@ class TestIsUpdateAvailable:
 
     def test_no_update_when_latest_is_older(self):
         # A server returning a downgraded version must not prompt an update.
-        with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)):
-            available, _ = is_update_available()
-        # 0.0.1 is not newer than the current version (>= 0.1.0)
+        with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0"):
+            with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)):
+                available, _ = is_update_available()
         assert available is False
 
     def test_partial_version_treated_as_padded(self):
