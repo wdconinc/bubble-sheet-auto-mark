@@ -532,10 +532,10 @@
             </div>
             <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
             <div id="edge-coords-panel">
-              <div id="edge-coord-row-top"    class="edge-coord-row"><span class="edge-coord-label">Top</span>    <input type="number" class="edge-coord-input" id="ec-top-x1"    step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y1"    step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-top-x2"    step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y2"    step="1" title="y2"></div>
-              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bottom</span><input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2"></div>
-              <div id="edge-coord-row-left"   class="edge-coord-row"><span class="edge-coord-label">Left</span>  <input type="number" class="edge-coord-input" id="ec-left-x1"   step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y1"   step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-left-x2"   step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y2"   step="1" title="y2"></div>
-              <div id="edge-coord-row-right"  class="edge-coord-row"><span class="edge-coord-label">Right</span> <input type="number" class="edge-coord-input" id="ec-right-x1"  step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y1"  step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-right-x2"  step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y2"  step="1" title="y2"></div>
+              <div id="edge-coord-row-top"    class="edge-coord-row"><span class="edge-coord-label">Top</span>    <input type="number" class="edge-coord-input" id="ec-top-x1"    step="1" title="x1" aria-label="Top x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y1"    step="1" title="y1" aria-label="Top y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-top-x2"    step="1" title="x2" aria-label="Top x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y2"    step="1" title="y2" aria-label="Top y2"></div>
+              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bottom</span><input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1" aria-label="Bottom x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1" aria-label="Bottom y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2" aria-label="Bottom x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2" aria-label="Bottom y2"></div>
+              <div id="edge-coord-row-left"   class="edge-coord-row"><span class="edge-coord-label">Left</span>  <input type="number" class="edge-coord-input" id="ec-left-x1"   step="1" title="x1" aria-label="Left x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y1"   step="1" title="y1" aria-label="Left y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-left-x2"   step="1" title="x2" aria-label="Left x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y2"   step="1" title="y2" aria-label="Left y2"></div>
+              <div id="edge-coord-row-right"  class="edge-coord-row"><span class="edge-coord-label">Right</span> <input type="number" class="edge-coord-input" id="ec-right-x1"  step="1" title="x1" aria-label="Right x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y1"  step="1" title="y1" aria-label="Right y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-right-x2"  step="1" title="x2" aria-label="Right x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y2"  step="1" title="y2" aria-label="Right y2"></div>
             </div>
             <div class="btn-row" style="margin-top:6px">
               <button class="btn-primary" id="btn-apply-correction"   type="button" disabled>✓ Apply Distortion Correction →</button>
@@ -3423,20 +3423,27 @@ btnDetectGrid.addEventListener('click',   () => detectRefGrid());
 
 // ── Coordinate input event handlers ──────────────────────────────────────────
 
+/** Returns a debounced version of fn that delays invocation by `ms` ms. */
+function debounce(fn, ms) {
+  let timer;
+  return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
+}
+
 EDGE_NAMES.forEach(edge => {
   edgeCoordInputs[edge].forEach((inp, i) => {
     if (!inp) return;
-    inp.addEventListener('change', () => {
+    inp.addEventListener('input', debounce(() => {
       const ln = refEdgeLines[edge];
-      if (!ln) return;
+      if (!ln) { updateEdgeInputs(edge); return; }
       const val = Math.round(parseFloat(inp.value));
-      if (!Number.isFinite(val)) return;
+      if (!Number.isFinite(val)) { inp.value = Math.round(ln[i]); return; }
       ln[i] = val;
+      inp.value = val;
       updateApplyCorrectionBtn();
       updateEdgeStatus();
       saveEdgeLines();
       redrawRefCanvas();
-    });
+    }, 200));
   });
 });
 
