@@ -25,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Setup Pages
         uses: actions/configure-pages@v6
@@ -51,9 +53,10 @@ jobs:
           import json, subprocess, pathlib
           def git(*args):
               return subprocess.check_output(['git'] + list(args), text=True).strip()
+          tag_out = git('tag', '--points-at', 'HEAD')
           data = {
               'hash':    git('rev-parse', 'HEAD'),
-              'tag':     git('tag', '--points-at', 'HEAD') or '',
+              'tag':     tag_out.splitlines()[0] if tag_out else '',
               'message': git('log', '-1', '--format=%s'),
           }
           pathlib.Path('_site/app/version.json').write_text(json.dumps(data))

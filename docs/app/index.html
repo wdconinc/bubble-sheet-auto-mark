@@ -317,9 +317,11 @@
       display: flex; align-items: center; gap: 8px;
       z-index: 100;
     }
+    #version-bar.hidden { display: none; }
     #version-bar a { color: var(--muted); }
     #version-bar a:hover { color: var(--text); }
     #version-hash { font-family: "SF Mono", "Fira Code", ui-monospace, monospace; }
+    #version-message { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
   </style>
 </head>
 <body>
@@ -498,12 +500,12 @@
   · Powered by <a href="https://pyodide.org" target="_blank" rel="noopener noreferrer">Pyodide</a>
 </footer>
 
-<div id="version-bar">
+<div id="version-bar" class="hidden">
   <span>Version:</span>
   <a id="version-link" href="https://github.com/wdconinc/bubble-sheet-auto-mark" target="_blank" rel="noopener noreferrer">
-    <span id="version-hash">—</span>
+    <span id="version-hash"></span>
   </a>
-  <span id="version-message" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1"></span>
+  <span id="version-message"></span>
 </div>
 
 <!-- ─────────────────────────────────────────────────────────────────────────
@@ -738,11 +740,14 @@ async function loadVersion() {
     const hashEl   = $('version-hash');
     const linkEl   = $('version-link');
     const msgEl    = $('version-message');
+    const barEl    = $('version-bar');
 
     hashEl.textContent = label;
-    linkEl.href =
-      `https://github.com/wdconinc/bubble-sheet-auto-mark/commit/${hash}`;
+    linkEl.href = hash
+      ? `https://github.com/wdconinc/bubble-sheet-auto-mark/commit/${hash}`
+      : `https://github.com/wdconinc/bubble-sheet-auto-mark/releases/tag/${tag}`;
     if (message) msgEl.textContent = message;
+    barEl.classList.remove('hidden');
   } catch (_) {}
 }
 
