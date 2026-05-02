@@ -29,6 +29,16 @@ class BubbleSheetDetector:
         * ``num_choices``          – choices per question (default 5, i.e. A-E)
         * ``num_id_digits``        – digits in the student-ID field (default 9)
         * ``id_choices_per_digit`` – choices per ID digit (default 10, i.e. 0-9)
+    answer_region:
+        Optional bounding box ``[x1, y1, x2, y2]`` with values normalized to
+        [0, 1] that defines where the answer bubbles are located on the
+        normalised sheet.  When *None* the built-in heuristic is used (top
+        ~72 % of the sheet).
+    id_region:
+        Optional bounding box ``[x1, y1, x2, y2]`` with values normalized to
+        [0, 1] that defines where the student-ID bubbles are located on the
+        normalised sheet.  When *None* the built-in heuristic is used (bottom
+        ~26 % of the sheet).
     """
 
     DEFAULT_LAYOUT: dict = {
@@ -38,8 +48,15 @@ class BubbleSheetDetector:
         "id_choices_per_digit": 10,
     }
 
-    def __init__(self, layout_config: Optional[dict] = None) -> None:
+    def __init__(
+        self,
+        layout_config: Optional[dict] = None,
+        answer_region: Optional[list] = None,
+        id_region: Optional[list] = None,
+    ) -> None:
         self.layout_config: dict = {**self.DEFAULT_LAYOUT, **(layout_config or {})}
+        self.answer_region: Optional[list] = answer_region
+        self.id_region: Optional[list] = id_region
 
     # ------------------------------------------------------------------
     # Public API
@@ -68,8 +85,17 @@ class BubbleSheetDetector:
         num_q = self.layout_config["num_questions"]
         num_c = self.layout_config["num_choices"]
 
-        # Answer section occupies roughly the top 70% of the sheet,
-        # leaving room for an ID section at the bottom.
+        if self.answer_region is not None:
+            h, w = normalised_image.shape[:2]
+            x1, y1, x2, y2 = self.answer_region
+            px1, py1 = int(w * x1), int(h * y1)
+            px2, py2 = int(w * x2), int(h * y2)
+            section = normalised_image[py1:py2, px1:px2]
+            return self._build_bubble_grid(
+                section, num_q, num_c, offset_x=px1, offset_y=py1
+            )
+
+        # Default: answer section occupies roughly the top 70% of the sheet.
         section = self._answer_section(normalised_image)
         return self._build_bubble_grid(section, num_q, num_c)
 
@@ -84,13 +110,24 @@ class BubbleSheetDetector:
         num_d = self.layout_config["num_id_digits"]
         num_choices = self.layout_config["id_choices_per_digit"]
 
-        id_top = int(normalised_image.shape[0] * 0.74)
-        section = self._id_section(normalised_image)
-        # For ID we build a grid where rows = digit choices, cols = digits
-        # then transpose to get per-digit lists.
-        # Pass id_top as offset_y so returned y coordinates are in the full
-        # normalised_image coordinate space (needed by BubbleAnalyzer).
-        raw_grid = self._build_bubble_grid(section, num_choices, num_d, offset_y=id_top)
+        if self.id_region is not None:
+            h, w = normalised_image.shape[:2]
+            x1, y1, x2, y2 = self.id_region
+            px1, py1 = int(w * x1), int(h * y1)
+            px2, py2 = int(w * x2), int(h * y2)
+            section = normalised_image[py1:py2, px1:px2]
+            raw_grid = self._build_bubble_grid(
+                section, num_choices, num_d, offset_x=px1, offset_y=py1
+            )
+        else:
+            id_top = int(normalised_image.shape[0] * 0.74)
+            section = self._id_section(normalised_image)
+            # Pass id_top as offset_y so returned y coordinates are in the full
+            # normalised_image coordinate space (needed by BubbleAnalyzer).
+            raw_grid = self._build_bubble_grid(
+                section, num_choices, num_d, offset_y=id_top
+            )
+
         # raw_grid[row][col] → we want [col][row]
         columns: list[list[tuple[int, int, int, int]]] = [
             [raw_grid[row][col] for row in range(num_choices)] for col in range(num_d)
@@ -114,6 +151,7 @@ class BubbleSheetDetector:
         section: np.ndarray,
         num_rows: int,
         num_cols: int,
+        offset_x: int = 0,
         offset_y: int = 0,
     ) -> list[list[tuple[int, int, int, int]]]:
         """Divide *section* into a uniform grid of bubble regions."""
@@ -137,7 +175,7 @@ class BubbleSheetDetector:
         for row in range(num_rows):
             row_bubbles: list[tuple[int, int, int, int]] = []
             for col in range(num_cols):
-                x = margin_x + col * cell_w + pad_x
+                x = margin_x + col * cell_w + pad_x + offset_x
                 y = margin_y + row * cell_h + pad_y + offset_y
                 row_bubbles.append((x, y, bub_w, bub_h))
             grid.append(row_bubbles)
