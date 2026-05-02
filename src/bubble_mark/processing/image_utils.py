@@ -134,18 +134,35 @@ def to_grayscale(image: np.ndarray) -> np.ndarray:
     )
 
 
-def apply_threshold(image: np.ndarray, method: str = "otsu") -> np.ndarray:
+def apply_threshold(
+    image: np.ndarray, method: str = "otsu", invert: bool = True
+) -> np.ndarray:
     """Binarize *image* using the chosen thresholding *method*.
 
     Supported methods: ``"otsu"`` (default) and ``"adaptive"``.
+
+    Parameters
+    ----------
+    image:
+        Input image (BGR or grayscale).
+    method:
+        Thresholding method: ``"otsu"`` (default) or ``"adaptive"``.
+    invert:
+        When ``True`` (default) dark pixels become 255 and bright pixels
+        become 0 — suitable for detecting dark objects (e.g. filled bubbles)
+        on a bright background.  When ``False`` the polarity is flipped:
+        bright pixels become 255 and dark pixels become 0 — suitable for
+        detecting a bright object (e.g. a white page) on a dark background.
     """
     gray = to_grayscale(image)
     if _HAVE_CV2:
         if method == "adaptive":
+            thresh_type = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
             return cv2.adaptiveThreshold(
-                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2
+                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, thresh_type, 11, 2
             )
-        _, binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+        thresh_type = cv2.THRESH_BINARY_INV if invert else cv2.THRESH_BINARY
+        _, binary = cv2.threshold(gray, 0, 255, thresh_type | cv2.THRESH_OTSU)
         return binary
     # Pure fallback -------------------------------------------------------
     if method == "adaptive":
@@ -154,14 +171,19 @@ def apply_threshold(image: np.ndarray, method: str = "otsu") -> np.ndarray:
         blurred = np.array(
             Image.fromarray(gray).filter(ImageFilter.GaussianBlur(radius=5))
         )
-        # Pixels darker than the local mean by more than 2 → foreground.
-        return np.where(
-            gray.astype(np.int16) - blurred.astype(np.int16) < -2,
-            np.uint8(255),
-            np.uint8(0),
-        )
+        diff = gray.astype(np.int16) - blurred.astype(np.int16)
+        # Match cv2 THRESH_BINARY_INV / THRESH_BINARY with C=2:
+        #   THRESH_BINARY_INV (invert=True):  foreground when gray <= mean - C
+        #                                     ↔ diff < -C  (i.e. diff < -2)
+        #   THRESH_BINARY     (invert=False): foreground when gray >  mean - C
+        #                                     ↔ diff > -C  (i.e. diff > -2)
+        condition = diff < -2 if invert else diff > -2
+        return np.where(condition, np.uint8(255), np.uint8(0))
     t = _otsu_threshold(gray)
-    return np.where(gray < t, np.uint8(255), np.uint8(0))
+    # Match cv2 convention: THRESH_BINARY_INV → foreground when gray <= thresh;
+    # THRESH_BINARY → foreground when gray > thresh.
+    condition = gray <= t if invert else gray > t
+    return np.where(condition, np.uint8(255), np.uint8(0))
 
 
 def find_page_contour(image: np.ndarray) -> Optional[np.ndarray]:
@@ -171,7 +193,7 @@ def find_page_contour(image: np.ndarray) -> Optional[np.ndarray]:
     or *None* if no suitable contour is found.
     """
     if _HAVE_CV2:
-        binary = apply_threshold(image, method="otsu")
+        binary = apply_threshold(image, method="otsu", invert=False)
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
         dilated = cv2.dilate(binary, kernel, iterations=1)
         contours, _ = cv2.findContours(
@@ -195,7 +217,7 @@ def find_page_contour(image: np.ndarray) -> Optional[np.ndarray]:
     # Strategy: threshold + dilate, then find the 4 extreme corner pixels of
     # the white region.  For a page that fills most of the frame this reliably
     # recovers the 4 corners even without a connected-components library.
-    binary = apply_threshold(image, method="otsu")
+    binary = apply_threshold(image, method="otsu", invert=False)
     dilated = _dilate_pure(binary, kernel_size=5)
 
     ys, xs = np.where(dilated > 0)
