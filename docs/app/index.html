@@ -791,8 +791,9 @@ function liveOverlayTick(now) {
     cameraOverlay.height = h;
     liveCanvasW = w;
     liveCanvasH = h;
-    liveCtx = cameraOverlay.getContext('2d');
   }
+  // Obtain the context once; dimension changes clear the canvas but keep the context.
+  if (!liveCtx) liveCtx = cameraOverlay.getContext('2d');
 
   // Redraw each frame: clear then paint the cached contour (if any).
   liveCtx.clearRect(0, 0, w, h);
@@ -814,16 +815,16 @@ function liveOverlayTick(now) {
     if (!blob || !detectContourFn) { liveLoopBusy = false; return; }
     try {
       const bytes  = new Uint8Array(await blob.arrayBuffer());
-      if (mySession !== overlaySession) { return; }  // guard after await
+      if (mySession !== overlaySession) { liveLoopBusy = false; return; }
       // detectContourFn returns the JSON string 'null' (no sheet) or
       // '{"contour":[[x,y],…]}' (page found).  JSON.parse maps 'null' → null.
       const result = JSON.parse(detectContourFn(bytes));
-      if (mySession !== overlaySession) { return; }  // guard after sync Python call
+      if (mySession !== overlaySession) { liveLoopBusy = false; return; }
       liveContour = result !== null ? result.contour : null;
     } catch (e) {
       console.warn('Live overlay error:', e);
     } finally {
-      if (mySession === overlaySession) liveLoopBusy = false;
+      liveLoopBusy = false;
     }
   }, 'image/jpeg', 0.7);
 }
