@@ -626,6 +626,9 @@ let results        = [];     // accumulated GradeResult dicts
 let pendingBytes   = null;   // Uint8Array of the currently loaded image
 let cameraStream   = null;
 
+// Fixed layout constant (matches id_choices_per_digit in the Python pipeline)
+const ID_CHOICES_PER_DIGIT = 10;
+
 // Reference-sheet region state
 let refImageEl     = null;   // HTMLImageElement for the uploaded blank sheet
 let drawMode       = null;   // 'answer' | 'id' | null
@@ -1218,6 +1221,55 @@ refCanvas.addEventListener('touchstart', onPointerDown, { passive: false });
 refCanvas.addEventListener('touchmove',  onPointerMove, { passive: false });
 refCanvas.addEventListener('touchend',   onPointerUp,   { passive: false });
 
+// Draw grid lines inside a committed region to show where bubbles will be sought.
+// The geometry mirrors BubbleSheetDetector._build_bubble_grid: 5 % margins on
+// each side, then a uniform numRows × numCols grid inside the usable area.
+function drawGridLines(region, numRows, numCols, strokeColor) {
+  if (!region || numRows < 1 || numCols < 1) return;
+  const [x1, y1, x2, y2] = region;
+  const rx   = x1 * refCanvas.width;
+  const ry   = y1 * refCanvas.height;
+  const secW = (x2 - x1) * refCanvas.width;
+  const secH = (y2 - y1) * refCanvas.height;
+  if (secW < 4 || secH < 4) return;
+
+  // Use Math.floor to match Python's int() / floor-division rounding so that
+  // the grid lines land on the same pixel positions as the actual detector.
+  const marginX = Math.floor(secW * 0.05);
+  const marginY = Math.floor(secH * 0.05);
+  const usableW = secW - 2 * marginX;
+  const usableH = secH - 2 * marginY;
+  const cellW   = Math.floor(usableW / numCols);
+  const cellH   = Math.floor(usableH / numRows);
+  const x0 = rx + marginX;
+  const y0 = ry + marginY;
+
+  refCtx.save();
+  refCtx.strokeStyle = strokeColor;
+  refCtx.lineWidth   = 1;
+  refCtx.globalAlpha = 0.7;
+
+  // Vertical dividers (one per column boundary)
+  for (let c = 0; c <= numCols; c++) {
+    const x = x0 + c * cellW;
+    refCtx.beginPath();
+    refCtx.moveTo(x, y0);
+    refCtx.lineTo(x, y0 + usableH);
+    refCtx.stroke();
+  }
+
+  // Horizontal dividers (one per row boundary)
+  for (let r = 0; r <= numRows; r++) {
+    const y = y0 + r * cellH;
+    refCtx.beginPath();
+    refCtx.moveTo(x0, y);
+    refCtx.lineTo(x0 + usableW, y);
+    refCtx.stroke();
+  }
+
+  refCtx.restore();
+}
+
 function redrawRefCanvas() {
   if (!refImageEl) return;
   refCtx.clearRect(0, 0, refCanvas.width, refCanvas.height);
@@ -1240,6 +1292,12 @@ function redrawRefCanvas() {
   drawRegion(answerRegion, '#2563eb', 'rgba(37,99,235,.18)');
   drawRegion(idRegion,     '#ea580c', 'rgba(234,88,12,.18)');
 
+  // Overlay grid lines so the user can verify the detected bubble layout.
+  // The ID region uses ID_CHOICES_PER_DIGIT rows, matching id_choices_per_digit.
+  const s = getSettings();
+  drawGridLines(answerRegion, s.numQuestions, s.numChoices, '#2563eb');
+  drawGridLines(idRegion, ID_CHOICES_PER_DIGIT, s.numIdDigits, '#ea580c');
+
   // Draw the live drag rectangle
   if (isDrawing && drawStart && drawCurrent && drawMode) {
     const stroke = drawMode === 'answer' ? '#2563eb' : '#ea580c';
@@ -1258,6 +1316,12 @@ function redrawRefCanvas() {
     refCtx.restore();
   }
 }
+
+// ── Redraw reference canvas when layout settings that affect the grid change ──
+
+['num-questions', 'num-choices', 'num-id-digits'].forEach((id) => {
+  $(id).addEventListener('input', () => { if (refImageEl) redrawRefCanvas(); });
+});
 
 // ── Collapsible settings ─────────────────────────────────────────────────────
 
