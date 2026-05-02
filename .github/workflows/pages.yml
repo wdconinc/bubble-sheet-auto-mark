@@ -45,7 +45,7 @@ jobs:
           JEKYLL_ENV: production
 
       - name: Copy Python package for Pyodide web app
-        run: cp -r src/bubble_mark _site/app/bubble_mark
+        run: cp -r src/bubble_mark _site/bubble_mark
 
       - name: Generate version.json for web app status bar
         run: |
@@ -59,7 +59,7 @@ jobs:
               'tag':     tag_out.splitlines()[0] if tag_out else '',
               'message': git('log', '-1', '--format=%s'),
           }
-          pathlib.Path('_site/app/version.json').write_text(json.dumps(data))
+          pathlib.Path('_site/version.json').write_text(json.dumps(data))
           EOF
 
       - name: Upload artifact

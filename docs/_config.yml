@@ -12,6 +12,8 @@ footer_content: "Released under the <a href=\"https://github.com/wdconinc/bubble
 
 # Aux links (top-right)
 aux_links:
+  "Open App":
+    - "../"
   "View on GitHub":
     - "https://github.com/wdconinc/bubble-sheet-auto-mark"
 
