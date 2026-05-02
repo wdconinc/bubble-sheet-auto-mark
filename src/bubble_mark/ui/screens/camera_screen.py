@@ -152,9 +152,9 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
                     title="Open bubble-sheet image",
                     file_types=["jpg", "jpeg", "png", "bmp"],
                 )
-            except Exception:
-                status_label.text = "File import cancelled."
-                logger.info("File import cancelled (dialog error).")
+            except Exception as exc:
+                status_label.text = "Error opening file dialog."
+                logger.exception("File dialog raised an unexpected error: %s", exc)
                 return
             if result is None:
                 status_label.text = "File import cancelled."
@@ -169,7 +169,7 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
                 _on_frame(rgb)
                 status_label.text = f"Loaded: {result.name}"
             except Exception as exc:
-                logger.error("Error loading image: %s", exc)
+                logger.exception("Error loading image: %s", exc)
                 status_label.text = f"Error loading image: {exc}"
 
         import asyncio
@@ -222,7 +222,7 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
             _stop()
             app.go_results()
         except Exception as exc:
-            logger.error("Grading failed: %s", exc)
+            logger.exception("Grading failed: %s", exc)
             status_label.text = f"Grading failed: {exc}"
 
     def stop_camera(widget: toga.Widget) -> None:

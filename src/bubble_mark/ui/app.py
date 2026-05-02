@@ -31,11 +31,12 @@ class BubbleMarkApp(toga.App):
         )
         root_logger = logging.getLogger()
         root_logger.addHandler(self._log_handler)
-        # Only configure the root level when it is still at NOTSET (the Python
-        # default).  If the caller has already configured logging we leave it
-        # alone; INFO is enough to make the status bar useful without flooding
-        # production logs with DEBUG noise.
-        if root_logger.level == logging.NOTSET:
+        # Ensure INFO-level records reach the status bar.  We lower the root
+        # level only when it still has no handlers other than our own (i.e. the
+        # app has not set up its own logging configuration), or when the level
+        # would suppress INFO messages entirely.
+        if not any(h for h in root_logger.handlers if h is not self._log_handler) \
+                or root_logger.level > logging.INFO:
             root_logger.setLevel(logging.INFO)
 
         # ── Status bar (collapsible log drawer) ───────────────────────────

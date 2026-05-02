@@ -68,9 +68,11 @@ class StatusBarHandler(logging.Handler):
     @property
     def lines(self) -> list[str]:
         """All retained log lines, oldest first."""
-        return list(self._lines)
+        with self._lock:
+            return list(self._lines)
 
     @property
     def last_line(self) -> str:
         """The most recent log line, or an empty string if none."""
-        return self._lines[-1] if self._lines else ""
+        with self._lock:
+            return self._lines[-1] if self._lines else ""
