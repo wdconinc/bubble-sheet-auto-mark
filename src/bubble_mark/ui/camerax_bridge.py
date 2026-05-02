@@ -42,10 +42,11 @@ def _is_android() -> bool:
 def _start_android(callback: FrameCallback) -> bool:
     """Start CameraX on Android.
 
-    Returns ``True`` when the camera pipeline has been successfully started (or
-    was already running), and ``False`` when the CAMERA permission has just been
-    requested from the user (the caller should prompt the user to grant it and
-    tap "Open Camera" again).
+    Returns ``True`` when CAMERA permission is granted and CameraX startup has
+    been initiated (or the camera was already running); note that the binding
+    itself is asynchronous and may still fail.  Returns ``False`` when the
+    CAMERA permission has just been requested from the user (the caller should
+    prompt the user to grant it and tap "Open Camera" again).
     """
     global _provider
     # Idempotency guard: silently skip if the camera is already running.
@@ -62,8 +63,9 @@ def _start_android(callback: FrameCallback) -> bool:
     # ------------------------------------------------------------------ #
     ContextCompat = autoclass("androidx.core.content.ContextCompat")
     ActivityCompat = autoclass("androidx.core.app.ActivityCompat")
+    PackageManager = autoclass("android.content.pm.PackageManager")
     _CAMERA_PERMISSION = "android.permission.CAMERA"
-    _PERMISSION_GRANTED = 0  # PackageManager.PERMISSION_GRANTED
+    _PERMISSION_GRANTED = PackageManager.PERMISSION_GRANTED
     _CAMERA_PERMISSION_REQUEST_CODE = 1
 
     if ContextCompat.checkSelfPermission(activity, _CAMERA_PERMISSION) != _PERMISSION_GRANTED:
