@@ -286,6 +286,12 @@
       text-align: left; font-weight: 600;
       border-bottom: 2px solid var(--border); white-space: nowrap;
     }
+    th[data-col] { cursor: pointer; user-select: none; }
+    th[data-col]:hover { background: var(--border); }
+    th[data-col]:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
+    th[data-col] .sort-indicator { margin-left: 5px; opacity: .35; font-size: .75em; }
+    th[data-col].sort-asc  .sort-indicator,
+    th[data-col].sort-desc .sort-indicator { opacity: 1; }
     td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
     td.mono { font-family: "SF Mono", "Fira Code", ui-monospace, monospace; }
     tr:last-child td { border-bottom: none; }
@@ -624,11 +630,11 @@
         <table id="results-table" hidden>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Student ID</th>
-              <th>Answers</th>
-              <th>Score</th>
-              <th>Correct / Total</th>
+              <th data-col="index" tabindex="0" aria-sort="none">#<span class="sort-indicator">↕</span></th>
+              <th data-col="student_id" tabindex="0" aria-sort="none">Student ID<span class="sort-indicator">↕</span></th>
+              <th data-col="answers" tabindex="0" aria-sort="none">Answers<span class="sort-indicator">↕</span></th>
+              <th data-col="score" tabindex="0" aria-sort="none">Score<span class="sort-indicator">↕</span></th>
+              <th data-col="num_correct" tabindex="0" aria-sort="none">Correct / Total<span class="sort-indicator">↕</span></th>
               <th id="th-view-image" hidden scope="col"><span aria-hidden="true">🖼</span> View image</th>
             </tr>
           </thead>
@@ -1019,6 +1025,8 @@ let processRefImageFn   = null;  // Python callable for reference-sheet processi
 let enhanceRefChannelFn = null;  // Python callable for channel re-enhancement
 let detectRefGridFn     = null;  // Python callable for grid-line detection
 let results        = [];     // accumulated GradeResult dicts
+let sortCol        = null;   // active sort column key, or null for original order
+let sortDir        = 1;      // 1 = ascending, -1 = descending
 let pendingFiles   = [];     // [{name, bytes}] – images queued for grading
 let gradedSheets   = [];     // [{name, bytes, result, annotatedB64}] – in-memory graded results
 let activeSheetIdx = -1;     // index of the currently shown graded sheet tab
@@ -2204,9 +2212,43 @@ function appendResultRow(r, idx, hasImages) {
 
 function renderResultsTable() {
   resultsTbody.innerHTML = '';
+
   const hasImages = gradedSheets.length > 0;
   thViewImage.hidden = !hasImages;
-  results.forEach((r, i) => appendResultRow(r, i + 1, hasImages));
+
+  // Build a sorted index array based on current sortCol / sortDir.
+  const indices = results.map((_, i) => i);
+  if (sortCol) {
+    // Pre-compute sort values (treating 'index' as the natural position).
+    const vals = indices.map((i) => sortCol === 'index' ? i : results[i][sortCol]);
+    indices.sort((a, b) => {
+      const va = vals[a];
+      const vb = vals[b];
+      // Null/undefined always sorts to the bottom regardless of direction.
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      if (typeof va === 'string') return va.localeCompare(vb) * sortDir;
+      return (va - vb) * sortDir;
+    });
+  }
+
+  indices.forEach((origIdx) => appendResultRow(results[origIdx], origIdx + 1, hasImages));
+
+  // Update header sort indicators and aria-sort.
+  resultsTable.querySelectorAll('th[data-col]').forEach((th) => {
+    th.classList.remove('sort-asc', 'sort-desc');
+    const ind = th.querySelector('.sort-indicator');
+    if (th.dataset.col === sortCol) {
+      const asc = sortDir === 1;
+      th.classList.add(asc ? 'sort-asc' : 'sort-desc');
+      th.setAttribute('aria-sort', asc ? 'ascending' : 'descending');
+      if (ind) ind.textContent = asc ? '↑' : '↓';
+    } else {
+      th.setAttribute('aria-sort', 'none');
+      if (ind) ind.textContent = '↕';
+    }
+  });
 }
 
 function refreshResultsPanel() {
@@ -2219,8 +2261,31 @@ function refreshResultsPanel() {
   btnClear.disabled       = !hasResults;
 }
 
+// Sort by column header click or keyboard activation (Enter / Space).
+resultsTable.querySelectorAll('th[data-col]').forEach((th) => {
+  const activate = () => {
+    const col = th.dataset.col;
+    if (sortCol === col) {
+      sortDir = -sortDir;
+    } else {
+      sortCol = col;
+      sortDir = 1;
+    }
+    if (results.length) renderResultsTable();
+  };
+  th.addEventListener('click', activate);
+  th.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      activate();
+    }
+  });
+});
+
 btnClear.addEventListener('click', () => {
   results = [];
+  sortCol = null;
+  sortDir = 1;
   gradedSheets  = [];
   activeSheetIdx = -1;
   resultsTbody.innerHTML = '';
