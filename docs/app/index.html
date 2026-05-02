@@ -611,7 +611,7 @@
               <th>Answers</th>
               <th>Score</th>
               <th>Correct / Total</th>
-              <th title="View image">🖼</th>
+              <th id="th-view-image" hidden scope="col"><span aria-hidden="true">🖼</span> View image</th>
             </tr>
           </thead>
           <tbody id="results-tbody"></tbody>
@@ -1064,6 +1064,7 @@ const resultCount    = $('result-count');
 const noResultsMsg   = $('no-results-msg');
 const resultsTable   = $('results-table');
 const resultsTbody   = $('results-tbody');
+const thViewImage    = $('th-view-image');
 const btnCsv         = $('btn-csv');
 const btnClear       = $('btn-clear');
 
@@ -2039,7 +2040,7 @@ function navigateToGradedSheet(gradedIdx) {
   activateTab(gradedIdx);
 }
 
-function appendResultRow(r, idx) {
+function appendResultRow(r, idx, hasImages) {
   const scored = r.score != null;
   const scoreTxt = scored ? `${(r.score * 100).toFixed(1)} %` : '–';
   const scoreCls = scored ? (r.score >= 0.6 ? 'good' : 'bad') : '';
@@ -2059,14 +2060,15 @@ function appendResultRow(r, idx) {
     <td class="mono" title="${escHtml(ans)}">${escHtml(ansDisplay)}</td>
     <td class="${scoreCls}">${scoreTxt}</td>
     <td>${correctTxt}</td>
-    <td class="view-col"></td>
+    ${hasImages ? '<td class="view-col"></td>' : ''}
   `;
 
   if (gradedIdx >= 0) {
     const btn = document.createElement('button');
-    btn.className = 'btn-view-image';
-    btn.type      = 'button';
-    btn.title     = `View image for sheet ${idx}`;
+    btn.className  = 'btn-view-image';
+    btn.type       = 'button';
+    btn.title      = `View image for sheet ${idx}`;
+    btn.setAttribute('aria-label', `View image for sheet ${idx}`);
     btn.textContent = '🔍';
     btn.addEventListener('click', () => navigateToGradedSheet(gradedIdx));
     tr.lastElementChild.appendChild(btn);
@@ -2077,7 +2079,9 @@ function appendResultRow(r, idx) {
 
 function renderResultsTable() {
   resultsTbody.innerHTML = '';
-  results.forEach((r, i) => appendResultRow(r, i + 1));
+  const hasImages = gradedSheets.length > 0;
+  thViewImage.hidden = !hasImages;
+  results.forEach((r, i) => appendResultRow(r, i + 1, hasImages));
 }
 
 function refreshResultsPanel() {
