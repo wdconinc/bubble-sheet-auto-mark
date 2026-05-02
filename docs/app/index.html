@@ -301,6 +301,40 @@
       border-top: 1px solid var(--border);
       margin-top: 8px;
     }
+
+    /* ── Graded-sheets tab bar ── */
+    #graded-tabs-section { margin-top: 12px; }
+    #graded-tabs-bar {
+      display: flex; align-items: center; gap: 4px; margin-bottom: 10px;
+    }
+    #graded-tabs {
+      flex: 1; display: flex; gap: 4px;
+      overflow-x: auto; scroll-behavior: smooth;
+      padding-bottom: 4px;
+    }
+    #graded-tabs::-webkit-scrollbar { height: 4px; }
+    #graded-tabs::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .sheet-tab {
+      white-space: nowrap; padding: 5px 12px; font-size: .8rem;
+      border-radius: 6px; flex-shrink: 0;
+    }
+    .sheet-tab.active-tab { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .sheet-tab.tab-error  { opacity: .6; }
+    #tab-prev, #tab-next  { padding: 5px 10px; font-size: 1rem; min-width: 34px; flex-shrink: 0; }
+
+    /* ── Sheet overlay viewer ── */
+    #sheet-overlay-area {
+      min-height: 110px;
+      border: 2px solid var(--primary);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      background: var(--bg); overflow: hidden;
+    }
+    #sheet-canvas { max-width: 100%; display: none; border-radius: 4px; }
+    #sheet-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
+
+    /* ── Pending images info ── */
+    #pending-info { font-size: .85rem; color: var(--muted); margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -414,14 +448,14 @@
   <!-- ── Grade card ── -->
   <div class="card">
     <div class="card-head static">
-      <h2>📷 Grade Image</h2>
+      <h2>📷 Grade Images</h2>
     </div>
     <div class="card-body">
       <div class="btn-row">
-        <button class="btn-primary" id="btn-upload" disabled>📁 Upload Image</button>
-        <input type="file" id="file-input" accept="image/*" hidden>
+        <button class="btn-primary" id="btn-upload" disabled>📁 Upload Images</button>
+        <input type="file" id="file-input" accept="image/*" multiple hidden>
         <button class="btn-ghost" id="btn-camera" disabled>📷 Use Camera</button>
-        <button class="btn-success" id="btn-grade" disabled>▶ Grade Sheet</button>
+        <button class="btn-success" id="btn-grade" disabled>▶ Grade Sheets</button>
       </div>
 
       <!-- Camera viewfinder + contour overlay -->
@@ -440,10 +474,29 @@
         </div>
       </div>
 
-      <!-- Image preview -->
+      <!-- Image preview (before grading) -->
       <div id="preview-area">
-        <span id="preview-hint">Upload an image or use the camera to get started.</span>
+        <span id="preview-hint">Upload images or use the camera to get started.</span>
         <canvas id="preview-canvas"></canvas>
+      </div>
+
+      <!-- Pending count info -->
+      <div id="pending-info" hidden></div>
+
+      <!-- Graded sheets tabbed viewer (shown after grading) -->
+      <div id="graded-tabs-section" hidden>
+        <div id="graded-tabs-bar">
+          <button class="btn-ghost" id="tab-prev" type="button" title="Previous sheet">&#8249;</button>
+          <div id="graded-tabs" role="tablist"></div>
+          <button class="btn-ghost" id="tab-next" type="button" title="Next sheet">&#8250;</button>
+        </div>
+        <div id="sheet-overlay-area">
+          <span id="sheet-hint">Select a sheet above.</span>
+          <canvas id="sheet-canvas"></canvas>
+        </div>
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn-ghost" id="btn-regrade" type="button" disabled>&#8635; Regrade This Sheet</button>
+        </div>
       </div>
 
       <div id="grade-status" class="status-pill"></div>
@@ -682,7 +735,9 @@ let gradeSheetFn   = null;   // Python callable, kept alive for the session
 let buildCsvFn     = null;
 let detectContourFn = null;  // Python callable for live page-contour detection
 let results        = [];     // accumulated GradeResult dicts
-let pendingBytes   = null;   // Uint8Array of the currently loaded image
+let pendingFiles   = [];     // [{name, bytes}] – images queued for grading
+let gradedSheets   = [];     // [{name, bytes, result, annotatedB64}] – in-memory graded results
+let activeSheetIdx = -1;     // index of the currently shown graded sheet tab
 let cameraStream   = null;
 
 // Fixed layout constant (matches id_choices_per_digit in the Python pipeline)
@@ -738,6 +793,17 @@ const btnDrawAnswer   = $('btn-draw-answer');
 const btnDrawId       = $('btn-draw-id');
 const btnClearAnswer  = $('btn-clear-answer');
 const btnClearId      = $('btn-clear-id');
+
+// Graded-sheet tab elements
+const pendingInfo       = $('pending-info');
+const gradedTabsSection = $('graded-tabs-section');
+const gradedTabsEl      = $('graded-tabs');
+const tabPrev           = $('tab-prev');
+const tabNext           = $('tab-next');
+const sheetOverlayArea  = $('sheet-overlay-area');
+const sheetCanvas       = $('sheet-canvas');
+const sheetHint         = $('sheet-hint');
+const btnRegrade        = $('btn-regrade');
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -832,7 +898,7 @@ function appendLog(msg) {
 function enableUI() {
   btnUpload.disabled = false;
   btnCamera.disabled = false;
-  if (pendingBytes !== null) btnGrade.disabled = false;
+  if (pendingFiles.length > 0) btnGrade.disabled = false;
 }
 
 function setStatus(msg, type) {
@@ -866,14 +932,26 @@ function getSettings() {
 
 // ── Image loading ────────────────────────────────────────────────────────────
 
-function loadImageBlob(blob) {
-  blob.arrayBuffer().then((buf) => {
-    pendingBytes = new Uint8Array(buf);
-    idbPut(IDB_KEY_PENDING, pendingBytes).catch(() => {});
+/**
+ * Add one or more File objects to pendingFiles and update the UI.
+ * The first file's image is drawn on the preview canvas for a quick sanity check.
+ */
+function addImageFiles(fileList) {
+  const files = Array.from(fileList);
+  if (!files.length) return;
 
-    // Draw preview on canvas.
-    const url = URL.createObjectURL(blob);
-    const img = new Image();
+  Promise.all(files.map((f) =>
+    f.arrayBuffer().then((buf) => ({ name: f.name, bytes: new Uint8Array(buf) }))
+  )).then((loaded) => {
+    pendingFiles = loaded;
+
+    // Persist the first file to IDB so a single-image session survives reload.
+    idbPut(IDB_KEY_PENDING, loaded[0].bytes).catch(() => {});
+
+    // Draw the first image on the preview canvas for visual confirmation.
+    const blob = new Blob([loaded[0].bytes]);
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
     img.onload = () => {
       previewCanvas.width  = img.naturalWidth;
       previewCanvas.height = img.naturalHeight;
@@ -885,9 +963,28 @@ function loadImageBlob(blob) {
     };
     img.src = url;
 
-    btnGrade.disabled = false;
-    setStatus('Image loaded — click "Grade Sheet" to process.', 'info');
+    // Show / hide the graded tabs section and preview area appropriately.
+    gradedTabsSection.hidden = true;
+    previewArea.style.display = '';
+
+    updatePendingInfo();
+    btnGrade.disabled = !gradeSheetFn;
+    setStatus(
+      loaded.length === 1
+        ? 'Image loaded — click "Grade Sheets" to process.'
+        : `${loaded.length} images loaded — click "Grade Sheets" to process.`,
+      'info'
+    );
   });
+}
+
+function updatePendingInfo() {
+  if (pendingFiles.length > 1) {
+    pendingInfo.textContent = `${pendingFiles.length} images queued`;
+    pendingInfo.hidden = false;
+  } else {
+    pendingInfo.hidden = true;
+  }
 }
 
 // ── Upload ───────────────────────────────────────────────────────────────────
@@ -895,12 +992,10 @@ function loadImageBlob(blob) {
 btnUpload.addEventListener('click', () => fileInput.click());
 
 fileInput.addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (file) {
-    stopCamera();
-    loadImageBlob(file);
-    fileInput.value = '';
-  }
+  if (!e.target.files.length) return;
+  stopCamera();
+  addImageFiles(e.target.files);
+  fileInput.value = '';
 });
 
 // ── Camera ───────────────────────────────────────────────────────────────────
@@ -944,7 +1039,9 @@ btnCapture.addEventListener('click', () => {
   cap.toBlob((blob) => {
     if (!blob) { setStatus('Failed to capture frame. Please try again.', 'error'); return; }
     stopCamera();
-    loadImageBlob(blob);
+    // Wrap as a File-like object compatible with addImageFiles.
+    const file = new File([blob], 'camera.jpg', { type: 'image/jpeg' });
+    addImageFiles([file]);
   }, 'image/jpeg', 0.92);
 });
 
@@ -1105,7 +1202,7 @@ function restoreResults() {
     const arr = JSON.parse(raw);
     if (!Array.isArray(arr) || arr.length === 0) return;
     results = arr;
-    results.forEach((r, i) => appendResultRow(r, i + 1));
+    renderResultsTable();
     refreshResultsPanel();
   } catch (_) {}
 }
@@ -1140,7 +1237,7 @@ async function restorePendingImage() {
   try {
     const bytes = await idbGet(IDB_KEY_PENDING);
     if (!(bytes instanceof Uint8Array) || bytes.length === 0) return;
-    pendingBytes = bytes;
+    pendingFiles = [{ name: 'restored.jpg', bytes }];
     const blob = new Blob([bytes]);
     const url  = URL.createObjectURL(blob);
     await new Promise((resolve) => {
@@ -1259,78 +1356,244 @@ function drawContourOverlay(ctx, pts) {
 
 // ── Grading ──────────────────────────────────────────────────────────────────
 
+/**
+ * Grade a single sheet image (Uint8Array) with the current settings.
+ * Returns the parsed result object (may include annotated_image_b64), or null.
+ */
+async function gradeOneSheet(bytes) {
+  const s = getSettings();
+  let refBytes = null;
+  try { refBytes = await idbGet(IDB_KEY_REF); } catch (_) {}
+  if (!(refBytes instanceof Uint8Array) || refBytes.length === 0) refBytes = null;
+
+  const resultJson = gradeSheetFn(
+    bytes,
+    s.numQuestions, s.numChoices, s.numIdDigits,
+    s.fillThreshold, s.answerKey,
+    JSON.stringify(s.answerRegion),
+    JSON.stringify(s.idRegion),
+    s.referenceColorChannel,
+    refBytes
+  );
+  return JSON.parse(resultJson);
+}
+
 btnGrade.addEventListener('click', async () => {
-  if (!pendingBytes || !gradeSheetFn) return;
+  if (!pendingFiles.length || !gradeSheetFn) return;
 
   btnGrade.disabled = true;
-  setStatus('Processing image — this may take a few seconds…', 'info');
+  gradedSheets = [];
+  activeSheetIdx = -1;
 
-  // Yield to the event loop so the status message renders before Pyodide blocks.
+  // Hide tabs while (re-)grading; show preview area with status updates.
+  gradedTabsSection.hidden = true;
+  previewArea.style.display = '';
+
+  for (let i = 0; i < pendingFiles.length; i++) {
+    const { name, bytes } = pendingFiles[i];
+    setStatus(
+      pendingFiles.length > 1
+        ? `Processing ${i + 1} / ${pendingFiles.length}: ${name}…`
+        : 'Processing image — this may take a few seconds…',
+      'info'
+    );
+    // Yield to the event loop so the status message renders before Pyodide blocks.
+    await new Promise((r) => setTimeout(r, 30));
+
+    try {
+      const result = await gradeOneSheet(bytes);
+      if (result === null) {
+        gradedSheets.push({ name, bytes, result: null, annotatedB64: null });
+      } else {
+        const annotatedB64 = result.annotated_image_b64 || null;
+        const { annotated_image_b64: _d, ref_warning: _w, ...resultToSave } = result;
+        results.push(resultToSave);
+        gradedSheets.push({ name, bytes, result: resultToSave, annotatedB64, resultIdx: results.length - 1 });
+
+        if (result.ref_warning) {
+          console.warn('[grade_sheet] reference image warning:', result.ref_warning);
+        }
+      }
+    } catch (err) {
+      console.error(`Grading error for ${name}:`, err);
+      gradedSheets.push({ name, bytes, result: null, annotatedB64: null, error: err.message });
+    }
+  }
+
+  saveResults();
+  renderResultsTable();
+  refreshResultsPanel();
+
+  // Switch to the tabbed view.
+  previewArea.style.display = 'none';
+  pendingInfo.hidden = true;
+  showGradedTabs();
+
+  // Show overall status.
+  const failed  = gradedSheets.filter((s) => s.result === null).length;
+  const success = gradedSheets.length - failed;
+  if (failed === gradedSheets.length) {
+    setStatus(
+      'No bubble sheets detected. Ensure each sheet fills most of the frame and try again.',
+      'error'
+    );
+  } else if (failed > 0) {
+    setStatus(`✓ Graded ${success} sheet(s); ${failed} could not be detected.`, 'info');
+  } else if (success === 1) {
+    const r = gradedSheets[0].result;
+    const scored = r && r.score != null;
+    setStatus(
+      scored
+        ? `✓ Graded: ${r.num_correct}/${r.num_questions} correct (${(r.score * 100).toFixed(1)} %)`
+        : `✓ Detected ${r.answers.length} answers. (No answer key — scoring skipped.)`,
+      'success'
+    );
+  } else {
+    setStatus(`✓ Graded ${success} sheets successfully.`, 'success');
+  }
+
+  btnGrade.disabled = false;
+});
+
+// ── Graded-sheet tabs ─────────────────────────────────────────────────────────
+
+function showGradedTabs() {
+  gradedTabsSection.hidden = false;
+  renderTabBar();
+  activateTab(0);
+}
+
+function renderTabBar() {
+  gradedTabsEl.innerHTML = '';
+  gradedSheets.forEach((sheet, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn-ghost sheet-tab' + (sheet.result === null ? ' tab-error' : '');
+    btn.type      = 'button';
+    btn.role      = 'tab';
+    // Use filename without extension as tab label; fall back to "Sheet N".
+    const label = sheet.name.replace(/\.[^.]+$/, '') || `Sheet ${i + 1}`;
+    btn.textContent = label;
+    btn.title       = sheet.result === null
+      ? `${sheet.name}: detection failed`
+      : `${sheet.name}: ${sheet.result.student_id || 'no ID'}`;
+    btn.addEventListener('click', () => activateTab(i));
+    gradedTabsEl.appendChild(btn);
+  });
+}
+
+function activateTab(idx) {
+  if (idx < 0 || idx >= gradedSheets.length) return;
+  activeSheetIdx = idx;
+
+  // Highlight the active tab.
+  Array.from(gradedTabsEl.querySelectorAll('.sheet-tab')).forEach((btn, i) => {
+    btn.classList.toggle('active-tab', i === idx);
+    btn.setAttribute('aria-selected', String(i === idx));
+  });
+
+  // Scroll the active tab into view within the tab bar.
+  const activeBtn = gradedTabsEl.querySelectorAll('.sheet-tab')[idx];
+  if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+
+  // Update prev/next buttons.
+  tabPrev.disabled = idx === 0;
+  tabNext.disabled = idx === gradedSheets.length - 1;
+
+  // Enable or disable the Regrade button.
+  btnRegrade.disabled = false;
+
+  // Show the annotated overlay (or raw image if detection failed).
+  const sheet = gradedSheets[idx];
+  if (sheet.annotatedB64) {
+    const img = new Image();
+    img.onload = () => {
+      sheetCanvas.width  = img.naturalWidth;
+      sheetCanvas.height = img.naturalHeight;
+      sheetCanvas.getContext('2d').drawImage(img, 0, 0);
+      sheetCanvas.style.display = 'block';
+      sheetHint.style.display   = 'none';
+    };
+    img.src = 'data:image/png;base64,' + sheet.annotatedB64;
+  } else {
+    // Detection failed: show the original image greyed out, with a hint.
+    const blob = new Blob([sheet.bytes]);
+    const url  = URL.createObjectURL(blob);
+    const img  = new Image();
+    img.onload = () => {
+      sheetCanvas.width  = img.naturalWidth;
+      sheetCanvas.height = img.naturalHeight;
+      const ctx = sheetCanvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      ctx.fillStyle = 'rgba(255,255,255,0.55)';
+      ctx.fillRect(0, 0, sheetCanvas.width, sheetCanvas.height);
+      sheetCanvas.style.display = 'block';
+      sheetHint.style.display   = 'none';
+      URL.revokeObjectURL(url);
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  }
+}
+
+tabPrev.addEventListener('click', () => activateTab(activeSheetIdx - 1));
+tabNext.addEventListener('click', () => activateTab(activeSheetIdx + 1));
+
+// ── Regrade ───────────────────────────────────────────────────────────────────
+
+btnRegrade.addEventListener('click', async () => {
+  if (activeSheetIdx < 0 || activeSheetIdx >= gradedSheets.length || !gradeSheetFn) return;
+
+  const sheet = gradedSheets[activeSheetIdx];
+  btnRegrade.disabled = true;
+  setStatus(`Regrading "${sheet.name}"…`, 'info');
   await new Promise((r) => setTimeout(r, 30));
 
   try {
-    const s = getSettings();
-    // Retrieve the reference image bytes stored in IndexedDB (may be null).
-    let refBytes = null;
-    try { refBytes = await idbGet(IDB_KEY_REF); } catch (_) {}
-    if (!(refBytes instanceof Uint8Array) || refBytes.length === 0) refBytes = null;
-
-    const resultJson = gradeSheetFn(
-      pendingBytes,
-      s.numQuestions, s.numChoices, s.numIdDigits,
-      s.fillThreshold, s.answerKey,
-      JSON.stringify(s.answerRegion),
-      JSON.stringify(s.idRegion),
-      s.referenceColorChannel,
-      refBytes
-    );
-
-    const result = JSON.parse(resultJson);
+    const result = await gradeOneSheet(sheet.bytes);
     if (result === null) {
-      setStatus(
-        'No bubble sheet detected. Ensure the sheet fills most of the frame and try again.',
-        'error'
-      );
+      sheet.result     = null;
+      sheet.annotatedB64 = null;
+      setStatus(`No bubble sheet detected when regrading "${sheet.name}".`, 'error');
     } else {
-      // Replace the preview canvas with the annotated overlay image.
-      if (result.annotated_image_b64) {
-        const img = new Image();
-        img.onload = () => {
-          previewCanvas.width  = img.naturalWidth;
-          previewCanvas.height = img.naturalHeight;
-          previewCanvas.getContext('2d').drawImage(img, 0, 0);
-          previewCanvas.style.display = 'block';
-        };
-        img.src = 'data:image/png;base64,' + result.annotated_image_b64;
+      const annotatedB64 = result.annotated_image_b64 || null;
+      const { annotated_image_b64: _d, ref_warning: _w, ...resultToSave } = result;
+
+      sheet.result     = resultToSave;
+      sheet.annotatedB64 = annotatedB64;
+
+      // Update the existing result in-place if there is one, otherwise append.
+      if (sheet.resultIdx != null && sheet.resultIdx >= 0 && sheet.resultIdx < results.length) {
+        results[sheet.resultIdx] = resultToSave;
+      } else {
+        results.push(resultToSave);
+        sheet.resultIdx = results.length - 1;
       }
 
-      // Strip the large base64 blob before persisting — it would exhaust
-      // localStorage quota (~5–10 MB limit) and cause saveResults() to fail.
-      const { annotated_image_b64: _dropped, ref_warning: _ref_warning, ...resultToSave } = result;
-      results.push(resultToSave);
       saveResults();
-      appendResultRow(resultToSave, results.length);
+      renderResultsTable();
       refreshResultsPanel();
 
-      // Surface any reference-image warning the Python side raised.
+      const scored = resultToSave.score != null;
+      setStatus(
+        scored
+          ? `✓ Regraded: ${resultToSave.num_correct}/${resultToSave.num_questions} correct (${(resultToSave.score * 100).toFixed(1)} %)`
+          : `✓ Regraded: ${resultToSave.answers.length} answers detected. (No answer key.)`,
+        'success'
+      );
+
       if (result.ref_warning) {
-        console.warn('[grade_sheet] reference image warning:', result.ref_warning);
-        setStatus(`⚠ Reference image issue: ${result.ref_warning}`, 'error');
-      } else {
-        const scored = result.score != null;
-        setStatus(
-          scored
-            ? `✓ Graded: ${result.num_correct}/${result.num_questions} correct (${(result.score * 100).toFixed(1)} %)`
-            : `✓ Detected ${result.answers.length} answers. (No answer key — scoring skipped.)`,
-          'success'
-        );
+        console.warn('[regrade] reference image warning:', result.ref_warning);
       }
     }
+
+    // Refresh the tab bar title and the sheet viewer.
+    renderTabBar();
+    activateTab(activeSheetIdx);
   } catch (err) {
-    setStatus(`Grading error: ${err.message}`, 'error');
+    setStatus(`Regrade error: ${err.message}`, 'error');
     console.error(err);
   } finally {
-    btnGrade.disabled = false;
+    btnRegrade.disabled = false;
   }
 });
 
@@ -1357,6 +1620,11 @@ function appendResultRow(r, idx) {
   resultsTbody.appendChild(tr);
 }
 
+function renderResultsTable() {
+  resultsTbody.innerHTML = '';
+  results.forEach((r, i) => appendResultRow(r, i + 1));
+}
+
 function refreshResultsPanel() {
   const n = results.length;
   resultCount.textContent = n;
@@ -1369,7 +1637,11 @@ function refreshResultsPanel() {
 
 btnClear.addEventListener('click', () => {
   results = [];
+  gradedSheets  = [];
+  activeSheetIdx = -1;
   resultsTbody.innerHTML = '';
+  gradedTabsSection.hidden = true;
+  previewArea.style.display = '';
   refreshResultsPanel();
   setStatus('', '');
   saveResults();
