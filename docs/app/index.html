@@ -339,6 +339,24 @@
     #ref-canvas.mode-edge-left,
     #ref-canvas.mode-edge-right { cursor: crosshair; border-color: #7c3aed; }
 
+    /* Edge-line coordinate inputs */
+    #edge-coords-panel { margin-top: 8px; }
+    .edge-coord-row {
+      display: none; align-items: center; gap: 6px;
+      font-size: .78rem; padding: 3px 0;
+    }
+    .edge-coord-row.has-line { display: flex; }
+    .edge-coord-label {
+      width: 3.2em; font-weight: 600; color: #7c3aed; flex-shrink: 0;
+    }
+    .edge-coord-input {
+      width: 5em; padding: 2px 4px; border: 1px solid var(--border);
+      border-radius: 4px; font-size: .78rem; text-align: right;
+      background: var(--bg); color: var(--text);
+    }
+    .edge-coord-input:focus { outline: none; border-color: #7c3aed; }
+    .edge-coord-sep { color: var(--muted); font-size: .75rem; }
+
     /* ── Graded-sheets tab bar ── */
     #graded-tabs-section { margin-top: 12px; }
     #graded-tabs-bar {
@@ -498,6 +516,12 @@
               <button class="btn-ghost" id="btn-edge-clear"  type="button">✕ Clear Lines</button>
             </div>
             <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
+            <div id="edge-coords-panel">
+              <div id="edge-coord-row-top"    class="edge-coord-row"><span class="edge-coord-label">Top</span>    <input type="number" class="edge-coord-input" id="ec-top-x1"    step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y1"    step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-top-x2"    step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y2"    step="1" title="y2"></div>
+              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bot</span>   <input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2"></div>
+              <div id="edge-coord-row-left"   class="edge-coord-row"><span class="edge-coord-label">Left</span>  <input type="number" class="edge-coord-input" id="ec-left-x1"   step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y1"   step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-left-x2"   step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y2"   step="1" title="y2"></div>
+              <div id="edge-coord-row-right"  class="edge-coord-row"><span class="edge-coord-label">Right</span> <input type="number" class="edge-coord-input" id="ec-right-x1"  step="1" title="x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y1"  step="1" title="y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-right-x2"  step="1" title="x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y2"  step="1" title="y2"></div>
+            </div>
             <div class="btn-row" style="margin-top:6px">
               <button class="btn-ghost"   id="btn-auto-detect-edges"  type="button">🔍 Auto-detect Edges</button>
               <button class="btn-primary" id="btn-apply-correction"   type="button" disabled>✓ Apply Distortion Correction →</button>
@@ -526,6 +550,7 @@
           <div id="ref-region-panel" style="display:none">
             <p class="ref-step-label">Step 3: Select bubble regions and detect grid</p>
             <div class="btn-row">
+              <button class="btn-ghost" id="btn-back-to-edges2" type="button">← Edit Edges</button>
               <button class="btn-ghost" id="btn-back-to-color" type="button">← Edit Color</button>
               <button class="btn-ghost" id="btn-detect-grid"   type="button" disabled>🔍 Detect Grid Lines</button>
             </div>
@@ -1126,9 +1151,16 @@ const btnApplyCorr     = $('btn-apply-correction');
 const refEdgeStatus    = $('ref-edge-status');
 const refColorInfo     = $('ref-color-info');
 const btnBackToEdges   = $('btn-back-to-edges');
+const btnBackToEdges2  = $('btn-back-to-edges2');
 const btnShowEnhanced  = $('btn-show-enhanced');
 const btnBackToColor   = $('btn-back-to-color');
 const btnDetectGrid    = $('btn-detect-grid');
+
+// Edge-line coordinate input elements (keyed by edge name then coord index 0-3)
+const edgeCoordInputs = {};
+['top', 'bottom', 'left', 'right'].forEach(edge => {
+  edgeCoordInputs[edge] = ['x1', 'y1', 'x2', 'y2'].map(c => $(`ec-${edge}-${c}`));
+});
 
 // Graded-sheet tab elements
 const pendingInfo       = $('pending-info');
@@ -1658,6 +1690,7 @@ function restoreEdgeLines() {
       };
       updateApplyCorrectionBtn();
       updateEdgeStatus();
+      updateAllEdgeInputs();
     }
   } catch (_) {}
 }
@@ -2470,6 +2503,7 @@ btnRefClear.addEventListener('click', () => {
   idbDelete(IDB_KEY_REF).catch(() => {});
   saveRegions();
   saveEdgeLines();
+  updateAllEdgeInputs();
 });
 
 btnDrawAnswer.addEventListener('click', () => setDrawMode(drawMode === 'answer' ? null : 'answer'));
@@ -2583,6 +2617,7 @@ function onPointerUp(e) {
         refEdgeLines[edgeDrawMode] = [ix1, iy1, ix2, iy2];
         updateApplyCorrectionBtn();
         updateEdgeStatus();
+        updateEdgeInputs(edgeDrawMode);
         saveEdgeLines();
       }
     }
@@ -2800,6 +2835,29 @@ function updateEdgeStatus() {
   } else {
     refEdgeStatus.textContent = `Drawn: ${drawn.join(', ')}. Still needed: ${remaining.join(', ')}.`;
   }
+}
+
+/**
+ * Populate coordinate inputs for one edge from refEdgeLines[edge].
+ * Shows the input row when a line exists, hides it otherwise.
+ */
+function updateEdgeInputs(edge) {
+  const row    = $(`edge-coord-row-${edge}`);
+  const inputs = edgeCoordInputs[edge];
+  const ln     = refEdgeLines[edge];
+  if (!row || !inputs) return;
+  if (ln) {
+    row.classList.add('has-line');
+    inputs.forEach((inp, i) => { inp.value = Math.round(ln[i]); });
+  } else {
+    row.classList.remove('has-line');
+    inputs.forEach(inp => { inp.value = ''; });
+  }
+}
+
+/** Refresh all four edge-line coordinate input rows. */
+function updateAllEdgeInputs() {
+  ['top', 'bottom', 'left', 'right'].forEach(updateEdgeInputs);
 }
 
 /**
@@ -3075,6 +3133,7 @@ btnEdgeClear.addEventListener('click', () => {
   setEdgeDrawMode(null);
   updateApplyCorrectionBtn();
   updateEdgeStatus();
+  updateAllEdgeInputs();
   saveEdgeLines();
   redrawRefCanvas();
 });
@@ -3097,6 +3156,7 @@ btnAutoEdges.addEventListener('click', async () => {
     };
     updateApplyCorrectionBtn();
     updateEdgeStatus();
+    updateAllEdgeInputs();
     saveEdgeLines();
     redrawRefCanvas();
   } catch (err) {
@@ -3109,9 +3169,29 @@ btnApplyCorr.addEventListener('click', () => applyRefCorrection());
 // ── Step navigation event handlers ───────────────────────────────────────────
 
 btnBackToEdges.addEventListener('click',  () => setRefStep(0));
+btnBackToEdges2.addEventListener('click', () => setRefStep(0));
 btnShowEnhanced.addEventListener('click', () => showEnhancedImage());
 btnBackToColor.addEventListener('click',  () => setRefStep(1));
 btnDetectGrid.addEventListener('click',   () => detectRefGrid());
+
+// ── Coordinate input event handlers ──────────────────────────────────────────
+
+['top', 'bottom', 'left', 'right'].forEach(edge => {
+  edgeCoordInputs[edge].forEach((inp, i) => {
+    if (!inp) return;
+    inp.addEventListener('change', () => {
+      const ln = refEdgeLines[edge];
+      if (!ln) return;
+      const val = parseFloat(inp.value);
+      if (!Number.isFinite(val)) return;
+      ln[i] = val;
+      updateApplyCorrectionBtn();
+      updateEdgeStatus();
+      saveEdgeLines();
+      redrawRefCanvas();
+    });
+  });
+});
 
 // ── Collapsible settings ─────────────────────────────────────────────────────
 
