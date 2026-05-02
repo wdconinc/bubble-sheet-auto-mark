@@ -1156,8 +1156,11 @@ function getCanvasPos(e) {
   const rect = refCanvas.getBoundingClientRect();
   const scaleX = refCanvas.width  / rect.width;
   const scaleY = refCanvas.height / rect.height;
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  // Support both mouse events and touch events (touchstart/touchmove use
+  // `touches`; touchend uses `changedTouches` since `touches` may be empty).
+  const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : null);
+  const clientX = touch ? touch.clientX : e.clientX;
+  const clientY = touch ? touch.clientY : e.clientY;
   return {
     x: (clientX - rect.left) * scaleX,
     y: (clientY - rect.top)  * scaleY,
@@ -1182,8 +1185,7 @@ function onPointerMove(e) {
 function onPointerUp(e) {
   if (!isDrawing) return;
   isDrawing = false;
-  const pos  = e.changedTouches ? { x: (e.changedTouches[0].clientX - refCanvas.getBoundingClientRect().left) * (refCanvas.width / refCanvas.getBoundingClientRect().width), y: (e.changedTouches[0].clientY - refCanvas.getBoundingClientRect().top) * (refCanvas.height / refCanvas.getBoundingClientRect().height) } : getCanvasPos(e);
-  drawCurrent = pos;
+  drawCurrent = getCanvasPos(e);
 
   const rx1 = Math.max(0, Math.min(drawStart.x, drawCurrent.x) / refCanvas.width);
   const ry1 = Math.max(0, Math.min(drawStart.y, drawCurrent.y) / refCanvas.height);

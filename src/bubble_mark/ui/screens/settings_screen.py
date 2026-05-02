@@ -88,7 +88,7 @@ def build_settings_screen(app: "BubbleMarkApp") -> toga.Box:
             if result is not None:
                 ref_path_label.text = str(result)
 
-        asyncio.ensure_future(_pick())
+        asyncio.create_task(_pick())
 
     btn_ref = toga.Button(
         "Upload Blank Sheet",
