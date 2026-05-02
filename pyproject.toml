@@ -70,9 +70,10 @@ requires = [
     "toga-android>=0.4",
     "Pillow>=10.0",
     "numpy>=1.26",
-    # opencv-python-headless Android wheels are provided by BeeWare mobile-forge.
-    # Without this, the contour overlay is silently skipped and grading is unavailable.
-    "opencv-python-headless>=4.8",
+    # opencv-python-headless is not available via Chaquopy (Briefcase's Android
+    # pip server). The contour overlay is silently skipped and grading falls back
+    # to "Image processing is not available on this platform." until a compatible
+    # Android wheel is published. Track: https://github.com/chaquo/chaquopy/issues
 ]
 gradle_extra_content = """
 dependencies {
