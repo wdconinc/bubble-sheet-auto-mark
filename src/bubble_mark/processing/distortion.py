@@ -473,12 +473,14 @@ def estimate_distortion_from_reference(
     """
     from bubble_mark.processing.color_channel import extract_print_channel
 
-    # Resize reference to match sheet if sizes differ
+    # Resize reference to match sheet if sizes differ.  Rebind the local name
+    # so that any previously-held full-resolution array can be freed by the GC
+    # once the caller releases its reference.
     sh, sw = sheet_image.shape[:2]
     rh, rw = reference_image.shape[:2]
     if (sh, sw) != (rh, rw):
         if _HAVE_CV2:
-            ref_resized = cv2.resize(
+            reference_image = cv2.resize(
                 reference_image, (sw, sh), interpolation=cv2.INTER_AREA
             )
         else:
@@ -489,16 +491,19 @@ def estimate_distortion_from_reference(
                     reference_image[:, :, ::-1].astype(np.uint8), mode="RGB"
                 )
                 pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
-                ref_resized = np.array(pil_resized)[:, :, ::-1].copy()
+                reference_image = np.array(pil_resized)[:, :, ::-1].copy()
+                del pil, pil_resized
             else:
                 pil = PILImage.fromarray(reference_image.astype(np.uint8), mode="L")
                 pil_resized = pil.resize((sw, sh), PILImage.LANCZOS)
-                ref_resized = np.array(pil_resized)
-    else:
-        ref_resized = reference_image
+                reference_image = np.array(pil_resized)
+                del pil, pil_resized
 
     ch_sheet = extract_print_channel(sheet_image, channel).astype(np.float32)
-    ch_ref = extract_print_channel(ref_resized, channel).astype(np.float32)
+    ch_ref = extract_print_channel(reference_image, channel).astype(np.float32)
+    del (
+        reference_image
+    )  # free the (possibly resized) copy now that channel is extracted
 
     # Normalised cross-correlation via FFT to find (dx, dy) translation
     dx, dy = _fft_translation(ch_sheet, ch_ref)
@@ -577,14 +582,26 @@ def _fft_translation(
     h = max(img_a.shape[0], img_b.shape[0])
     w = max(img_a.shape[1], img_b.shape[1])
 
-    fa = np.fft.fft2(img_a, s=(h, w))
-    fb = np.fft.fft2(img_b, s=(h, w))
+    # Use rfft2 (real-input FFT) so frequency-domain arrays are h×(w//2+1)
+    # instead of h×w — roughly half the memory of the full complex fft2.
+    fa = np.fft.rfft2(img_a, s=(h, w))
+    fb = np.fft.rfft2(img_b, s=(h, w))
 
-    cross_power = fa * np.conj(fb)
-    denom = np.abs(cross_power) + _FFT_EPSILON  # avoid division by zero
-    normalised = cross_power / denom
+    # Conjugate fb in-place, then multiply into fa in-place so peak memory
+    # stays at 2 FFT-sized arrays (fa and fb) instead of 3.
+    fb.imag *= -1  # conjugate fb in-place
+    fa *= fb  # fa = fa * conj(fb), in-place
+    del fb
+    cross_power = fa  # rename for clarity (no extra allocation)
 
-    response = np.fft.ifft2(normalised).real
+    denom = np.abs(cross_power) + _FFT_EPSILON
+    cross_power /= denom
+    del denom
+
+    # irfft2 returns a real array directly — no .real needed.
+    response = np.fft.irfft2(cross_power, s=(h, w))
+    del cross_power
+
     idx = np.unravel_index(np.argmax(response), response.shape)
 
     dy_raw, dx_raw = idx
