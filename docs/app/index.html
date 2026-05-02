@@ -538,7 +538,23 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
     grader = BubbleSheetGrader(answer_key, detector, analyzer)
 
     result = grader.grade_image(bgr)
-    return 'null' if result is None else json.dumps(result.to_dict())
+    if result is None:
+        return 'null'
+
+    out = result.to_dict()
+
+    # Encode the annotated overlay image as a base64 PNG so JavaScript can
+    # draw it on the preview canvas without any additional round-trips.
+    ann = result.annotated_image
+    if ann is not None and ann.ndim == 3 and ann.shape[2] >= 3:
+        import base64
+        annotated_rgb = ann[:, :, :3][:, :, ::-1].copy()  # BGR → RGB
+        pil_ann = PILImage.fromarray(annotated_rgb, mode='RGB')
+        buf = io.BytesIO()
+        pil_ann.save(buf, format='PNG')
+        out['annotated_image_b64'] = base64.b64encode(buf.getvalue()).decode('ascii')
+
+    return json.dumps(out)
 
 
 def build_csv(results_json_str, answer_key_str):
@@ -1218,9 +1234,24 @@ btnGrade.addEventListener('click', async () => {
         'error'
       );
     } else {
-      results.push(result);
+      // Replace the preview canvas with the annotated overlay image.
+      if (result.annotated_image_b64) {
+        const img = new Image();
+        img.onload = () => {
+          previewCanvas.width  = img.naturalWidth;
+          previewCanvas.height = img.naturalHeight;
+          previewCanvas.getContext('2d').drawImage(img, 0, 0);
+          previewCanvas.style.display = 'block';
+        };
+        img.src = 'data:image/png;base64,' + result.annotated_image_b64;
+      }
+
+      // Strip the large base64 blob before persisting — it would exhaust
+      // localStorage quota (~5–10 MB limit) and cause saveResults() to fail.
+      const { annotated_image_b64: _dropped, ...resultToSave } = result;
+      results.push(resultToSave);
       saveResults();
-      appendResultRow(result, results.length);
+      appendResultRow(resultToSave, results.length);
       refreshResultsPanel();
 
       const scored = result.score != null;
