@@ -48,10 +48,15 @@ def get_latest_release() -> tuple[str, str | None]:
         return "0.0.0", None
 
 
-def _parse_version(v: str) -> tuple[int, ...]:
-    """Parse a dotted-version string into a tuple of ints for comparison."""
+def _parse_version(v: str) -> tuple[int, int, int]:
+    """Parse a dotted-version string into a normalised 3-tuple of ints.
+
+    Pads short versions (e.g. ``"1.2"`` → ``(1, 2, 0)``) and returns
+    ``(0, 0, 0)`` for any malformed input so comparisons remain consistent.
+    """
+    parts = (v.split(".") + ["0", "0", "0"])[:3]
     try:
-        return tuple(int(x) for x in v.split("."))
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
     except ValueError:
         return (0, 0, 0)
 

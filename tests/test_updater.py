@@ -133,6 +133,13 @@ class TestIsUpdateAvailable:
         # 0.0.1 is not newer than the current version (>= 0.1.0)
         assert available is False
 
+    def test_partial_version_treated_as_padded(self):
+        # "1.2" should compare equal to "1.2.0" and not trigger an update.
+        with patch("bubble_mark.updater.CURRENT_VERSION", "1.2.0"):
+            with patch("bubble_mark.updater.get_latest_release", return_value=("1.2", None)):
+                available, _ = is_update_available()
+        assert available is False
+
     def test_no_update_on_network_error(self):
         # get_latest_release returns "0.0.0" on error; "0.0.0" is older than
         # the current version so no spurious update prompt is shown.
