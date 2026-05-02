@@ -9,9 +9,11 @@
     entirely in this browser tab.  No image or grade data is ever transmitted
     to any server.
   -->
-  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"
-          integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
-          crossorigin="anonymous"></script>
+  <link rel="modulepreload"
+        href="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"
+        integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
+        crossorigin="anonymous">
+
   <style>
     :root {
       --primary:       #2563eb;
@@ -430,8 +432,8 @@ def build_csv(results_json_str, answer_key_str):
 <!-- ─────────────────────────────────────────────────────────────────────────
      Application JavaScript
      ───────────────────────────────────────────────────────────────────────── -->
-<script>
-'use strict';
+<script type="module">
+import { loadPyodide } from 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
