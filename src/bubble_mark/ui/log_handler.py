@@ -1,4 +1,5 @@
 """In-memory logging handler that feeds the status-bar drawer."""
+
 from __future__ import annotations
 
 import collections

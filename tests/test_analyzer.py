@@ -1,11 +1,12 @@
 """Tests for bubble_mark.processing.analyzer."""
+
 from __future__ import annotations
 
 import numpy as np
 import pytest
 
 from bubble_mark.processing.analyzer import BubbleAnalyzer
-from tests.conftest import create_filled_bubble_image, create_empty_bubble_image
+from tests.conftest import create_empty_bubble_image, create_filled_bubble_image
 
 
 class TestBubbleAnalyzerInit:
@@ -31,7 +32,9 @@ class TestAnalyzeBubble:
         """Embed *bubble* into a white sheet; return (sheet, region)."""
         h, w = bubble.shape[:2]
         sheet = np.full((h + 20, w + 20), 255, dtype=np.uint8)
-        sheet[10: 10 + h, 10: 10 + w] = bubble if bubble.ndim == 2 else bubble[:, :, 0]
+        sheet[10 : 10 + h, 10 : 10 + w] = (
+            bubble if bubble.ndim == 2 else bubble[:, :, 0]
+        )
         return sheet, (10, 10, w, h)
 
     def test_filled_bubble_returns_true(self):
@@ -75,7 +78,7 @@ class TestAnalyzeAnswerRow:
             x = 10 + i * (bub_w + gap)
             y = 10
             if i in filled_idx:
-                sheet[y: y + bub_h, x: x + bub_w] = 0
+                sheet[y : y + bub_h, x : x + bub_w] = 0
             bubbles.append((x, y, bub_w, bub_h))
         return sheet, bubbles
 
@@ -111,7 +114,7 @@ class TestAnalyzeIdColumn:
             x = 10
             y = 10 + i * (bub_h + gap)
             if i == filled_digit:
-                sheet[y: y + bub_h, x: x + bub_w] = 0
+                sheet[y : y + bub_h, x : x + bub_w] = 0
             bubbles.append((x, y, bub_w, bub_h))
         return sheet, bubbles
 
@@ -141,6 +144,6 @@ class TestAnalyzeIdColumn:
         for i in range(num_choices):
             x, y = 10, 10 + i * (bub_h + gap)
             if i in (2, 7):
-                sheet[y: y + bub_h, x: x + bub_w] = 0
+                sheet[y : y + bub_h, x : x + bub_w] = 0
             bubbles.append((x, y, bub_w, bub_h))
         assert a.analyze_id_column(sheet, bubbles) == "?"

@@ -1,4 +1,5 @@
 """Tests for bubble_mark.export.csv_exporter."""
+
 from __future__ import annotations
 
 import csv
@@ -70,7 +71,7 @@ class TestExportToString:
 
     def test_correct_number_of_data_rows(self, results):
         csv_str = CSVExporter().export_to_string(results)
-        lines = [l for l in csv_str.strip().splitlines() if l]
+        lines = [line for line in csv_str.strip().splitlines() if line]
         # header + 2 data rows
         assert len(lines) == 3
 
@@ -83,7 +84,7 @@ class TestExportToString:
 
     def test_empty_results(self):
         csv_str = CSVExporter().export_to_string([])
-        lines = [l for l in csv_str.strip().splitlines() if l]
+        lines = [line for line in csv_str.strip().splitlines() if line]
         assert len(lines) == 1  # header only
 
     def test_score_value_format(self, results):

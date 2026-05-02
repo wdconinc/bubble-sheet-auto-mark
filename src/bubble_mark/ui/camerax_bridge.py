@@ -17,6 +17,7 @@ Usage::
     ...
     stop_camera()
 """
+
 from __future__ import annotations
 
 import sys
@@ -39,23 +40,49 @@ def _is_android() -> bool:
 # Android implementation
 # ---------------------------------------------------------------------------
 
-def _start_android(callback: FrameCallback) -> None:
+
+def _start_android(callback: FrameCallback) -> bool:
+    """Start CameraX on Android.
+
+    Returns ``True`` when CAMERA permission is granted and CameraX startup has
+    been initiated (or the camera was already running); note that the binding
+    itself is asynchronous and may still fail.  Returns ``False`` when the
+    CAMERA permission has just been requested from the user (the caller should
+    prompt the user to grant it and tap "Open Camera" again).
+    """
     global _provider
     # Idempotency guard: silently skip if the camera is already running.
     if _provider is not None:
-        return
+        return True
 
-    from jnius import autoclass, PythonJavaClass, java_method  # type: ignore[import]
+    from jnius import PythonJavaClass, autoclass, java_method  # type: ignore[import]
+
+    MainActivity = autoclass("org.beeware.android.MainActivity")
+    activity = MainActivity.sActivity
+
+    # ------------------------------------------------------------------ #
+    # Runtime CAMERA permission check (required on Android 6+)           #
+    # ------------------------------------------------------------------ #
+    ContextCompat = autoclass("androidx.core.content.ContextCompat")
+    ActivityCompat = autoclass("androidx.core.app.ActivityCompat")
+    PackageManager = autoclass("android.content.pm.PackageManager")
+    _CAMERA_PERMISSION = "android.permission.CAMERA"
+    _PERMISSION_GRANTED = PackageManager.PERMISSION_GRANTED
+    _CAMERA_PERMISSION_REQUEST_CODE = 1
+
+    if (
+        ContextCompat.checkSelfPermission(activity, _CAMERA_PERMISSION)
+        != _PERMISSION_GRANTED
+    ):
+        ActivityCompat.requestPermissions(
+            activity, [_CAMERA_PERMISSION], _CAMERA_PERMISSION_REQUEST_CODE
+        )
+        return False
 
     ProcessCameraProvider = autoclass("androidx.camera.lifecycle.ProcessCameraProvider")
     ImageAnalysis = autoclass("androidx.camera.core.ImageAnalysis")
     CameraSelector = autoclass("androidx.camera.core.CameraSelector")
-    ContextCompat = autoclass("androidx.core.content.ContextCompat")
     Executors = autoclass("java.util.concurrent.Executors")
-    # Briefcase's MainActivity is the lifecycle owner.
-    MainActivity = autoclass("org.beeware.android.MainActivity")
-
-    activity = MainActivity.sActivity
     # Main executor: used only for bindToLifecycle (must run on UI thread).
     main_executor = ContextCompat.getMainExecutor(activity)
     # Background executor: used for frame analysis to avoid blocking the UI thread.
@@ -96,9 +123,7 @@ def _start_android(callback: FrameCallback) -> None:
         ImageAnalysis.Builder()
         # RGBA_8888 = 2 (single plane, trivial numpy reshape)
         .setOutputImageFormat(2)
-        .setBackpressureStrategy(
-            ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST
-        )
+        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
         .build()
     )
     # Use a background executor so numpy/OpenCV work never runs on the UI thread.
@@ -122,10 +147,12 @@ def _start_android(callback: FrameCallback) -> None:
                 )
             except Exception as exc:
                 import logging
+
                 logging.getLogger(__name__).error("CameraX bind failed: %s", exc)
 
     # bindToLifecycle must be called on the main thread.
     future.addListener(_ProviderCallback(), main_executor)
+    return True
 
 
 def _stop_android() -> None:
@@ -142,8 +169,10 @@ def _stop_android() -> None:
 # Desktop stub
 # ---------------------------------------------------------------------------
 
-def _start_stub(callback: FrameCallback) -> None:  # noqa: D401
+
+def _start_stub(callback: FrameCallback) -> bool:  # noqa: D401
     """No-op on non-Android platforms."""
+    return True
 
 
 def _stop_stub() -> None:

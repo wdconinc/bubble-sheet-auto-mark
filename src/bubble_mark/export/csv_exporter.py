@@ -1,4 +1,5 @@
 """CSV exporter for grading results."""
+
 from __future__ import annotations
 
 import csv

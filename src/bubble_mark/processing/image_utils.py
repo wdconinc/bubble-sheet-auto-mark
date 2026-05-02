@@ -6,6 +6,7 @@ which does not yet ship a cp312 OpenCV wheel) every function falls back to an
 equivalent implementation built on NumPy and Pillow, both of which are always
 available.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,6 +16,7 @@ import numpy as np
 
 try:
     import cv2
+
     _HAVE_CV2 = True
 except ImportError:
     _HAVE_CV2 = False
@@ -23,6 +25,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Pure-NumPy / Pillow helpers (used only when cv2 is unavailable)
 # ---------------------------------------------------------------------------
+
 
 def _otsu_threshold(gray: np.ndarray) -> int:
     """Compute Otsu's optimal binarization threshold using only NumPy."""
@@ -53,6 +56,7 @@ def _otsu_threshold(gray: np.ndarray) -> int:
 def _dilate_pure(binary: np.ndarray, kernel_size: int = 5) -> np.ndarray:
     """Morphological binary dilation using PIL MaxFilter."""
     from PIL import Image, ImageFilter
+
     pil = Image.fromarray(binary)
     return np.array(pil.filter(ImageFilter.MaxFilter(kernel_size)))
 
@@ -83,6 +87,7 @@ def _perspective_coeffs(src_pts: np.ndarray, dst_pts: np.ndarray) -> list:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 def load_image(path: str) -> np.ndarray:
     """Load an image from *path* and return it as a BGR NumPy array.
 
@@ -96,7 +101,9 @@ def load_image(path: str) -> np.ndarray:
         if image is None:
             raise ValueError(f"Could not decode image: {path}")
         return image
-    from PIL import Image as PILImage, UnidentifiedImageError
+    from PIL import Image as PILImage
+    from PIL import UnidentifiedImageError
+
     try:
         with PILImage.open(path) as pil_raw:
             pil = pil_raw.convert("RGB")
@@ -117,10 +124,14 @@ def to_grayscale(image: np.ndarray) -> np.ndarray:
         return cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     # Pure NumPy: ITU-R 601 coefficients for BGR channel order.
     return (
-        0.114 * image[:, :, 0].astype(np.float32)
-        + 0.587 * image[:, :, 1].astype(np.float32)
-        + 0.299 * image[:, :, 2].astype(np.float32)
-    ).clip(0, 255).astype(np.uint8)
+        (
+            0.114 * image[:, :, 0].astype(np.float32)
+            + 0.587 * image[:, :, 1].astype(np.float32)
+            + 0.299 * image[:, :, 2].astype(np.float32)
+        )
+        .clip(0, 255)
+        .astype(np.uint8)
+    )
 
 
 def apply_threshold(image: np.ndarray, method: str = "otsu") -> np.ndarray:
@@ -139,13 +150,15 @@ def apply_threshold(image: np.ndarray, method: str = "otsu") -> np.ndarray:
     # Pure fallback -------------------------------------------------------
     if method == "adaptive":
         from PIL import Image, ImageFilter
+
         blurred = np.array(
             Image.fromarray(gray).filter(ImageFilter.GaussianBlur(radius=5))
         )
         # Pixels darker than the local mean by more than 2 → foreground.
         return np.where(
             gray.astype(np.int16) - blurred.astype(np.int16) < -2,
-            np.uint8(255), np.uint8(0)
+            np.uint8(255),
+            np.uint8(0),
         )
     t = _otsu_threshold(gray)
     return np.where(gray < t, np.uint8(255), np.uint8(0))
@@ -194,13 +207,13 @@ def find_page_contour(image: np.ndarray) -> Optional[np.ndarray]:
         return None
 
     coords = np.stack([xs, ys], axis=1).astype(np.float32)
-    s = coords[:, 0] + coords[:, 1]   # x + y
-    d = coords[:, 0] - coords[:, 1]   # x - y
+    s = coords[:, 0] + coords[:, 1]  # x + y
+    d = coords[:, 0] - coords[:, 1]  # x - y
 
-    tl = coords[np.argmin(s)]   # top-left:     min(x+y)
-    br = coords[np.argmax(s)]   # bottom-right: max(x+y)
-    tr = coords[np.argmax(d)]   # top-right:    max(x-y)
-    bl = coords[np.argmin(d)]   # bottom-left:  min(x-y)
+    tl = coords[np.argmin(s)]  # top-left:     min(x+y)
+    br = coords[np.argmax(s)]  # bottom-right: max(x+y)
+    tr = coords[np.argmax(d)]  # top-right:    max(x-y)
+    bl = coords[np.argmin(d)]  # bottom-left:  min(x-y)
 
     return np.array([tl, tr, br, bl], dtype=np.float32).reshape(4, 1, 2)
 
@@ -214,8 +227,8 @@ def order_points(pts: np.ndarray) -> np.ndarray:
     ordered = np.zeros((4, 2), dtype=np.float32)
 
     s = pts.sum(axis=1)
-    ordered[0] = pts[np.argmin(s)]   # top-left: smallest sum
-    ordered[2] = pts[np.argmax(s)]   # bottom-right: largest sum
+    ordered[0] = pts[np.argmin(s)]  # top-left: smallest sum
+    ordered[2] = pts[np.argmax(s)]  # bottom-right: largest sum
 
     diff = np.diff(pts, axis=1)
     ordered[1] = pts[np.argmin(diff)]  # top-right: smallest diff (x-y)
@@ -253,14 +266,19 @@ def perspective_transform(image: np.ndarray, contour: np.ndarray) -> np.ndarray:
 
     # Pure Pillow fallback ------------------------------------------------
     from PIL import Image as PILImage
+
     coeffs = _perspective_coeffs(ordered, dst)
     is_color = image.ndim == 3 and image.shape[2] >= 3
     if is_color:
         pil = PILImage.fromarray(image[:, :, ::-1].astype(np.uint8))  # BGR → RGB
-        result = pil.transform((width, height), PILImage.PERSPECTIVE, coeffs, PILImage.BICUBIC)
+        result = pil.transform(
+            (width, height), PILImage.PERSPECTIVE, coeffs, PILImage.BICUBIC
+        )
         return np.array(result)[:, :, ::-1].copy()  # RGB → BGR
     pil = PILImage.fromarray(image.astype(np.uint8))
-    result = pil.transform((width, height), PILImage.PERSPECTIVE, coeffs, PILImage.BICUBIC)
+    result = pil.transform(
+        (width, height), PILImage.PERSPECTIVE, coeffs, PILImage.BICUBIC
+    )
     return np.array(result)
 
 
@@ -284,11 +302,16 @@ def resize_image(
         if width is not None and height is not None:
             return cv2.resize(image, (width, height), interpolation=cv2.INTER_AREA)
         if width is not None:
-            return cv2.resize(image, (width, int(h * width / w)), interpolation=cv2.INTER_AREA)
-        return cv2.resize(image, (int(w * height / h), height), interpolation=cv2.INTER_AREA)
+            return cv2.resize(
+                image, (width, int(h * width / w)), interpolation=cv2.INTER_AREA
+            )
+        return cv2.resize(
+            image, (int(w * height / h), height), interpolation=cv2.INTER_AREA
+        )
 
     # Pure Pillow fallback ------------------------------------------------
     from PIL import Image as PILImage
+
     if width is not None and height is not None:
         new_size = (width, height)
     elif width is not None:

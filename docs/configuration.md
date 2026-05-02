@@ -77,6 +77,6 @@ bubble-sheet-auto-mark/
 │   │   └── settings.py            # AppSettings (layout config)
 │   ├── export/
 │   │   └── csv_exporter.py        # CSV export
-│   └── ui/                        # Kivy screens (no test dependency)
-└── tests/                         # pytest suite (~119 tests, no camera needed)
+│   └── ui/                        # Toga screens (no test dependency)
+└── tests/                         # pytest suite (~159 tests, no camera needed)
 ```

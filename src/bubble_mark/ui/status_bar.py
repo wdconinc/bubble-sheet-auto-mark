@@ -12,6 +12,7 @@ Usage::
     bar = LogStatusBar(app, handler)
     wrapper_box.add(screen_area, bar.widget)
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -1,4 +1,5 @@
 """In-app update checker for Bubble Sheet Auto-Mark."""
+
 from __future__ import annotations
 
 import importlib.util
@@ -172,7 +173,9 @@ def check_and_prompt_update(app_instance: Any) -> None:
     On non-Android platforms this function returns immediately without
     showing any UI so desktop development is unaffected.
     """
-    on_android = sys.platform == "linux" and importlib.util.find_spec("android") is not None
+    on_android = (
+        sys.platform == "linux" and importlib.util.find_spec("android") is not None
+    )
     if not on_android:
         return
 

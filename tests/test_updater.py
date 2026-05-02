@@ -1,12 +1,10 @@
 """Tests for bubble_mark.updater."""
+
 from __future__ import annotations
 
 import json
 import urllib.error
-from io import BytesIO
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 import bubble_mark.updater as updater_module
 from bubble_mark.updater import (
@@ -16,10 +14,10 @@ from bubble_mark.updater import (
     is_update_available,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_response(data: dict) -> MagicMock:
     """Return a mock urllib response whose .read() returns JSON bytes."""
@@ -34,6 +32,7 @@ def _make_response(data: dict) -> MagicMock:
 # ---------------------------------------------------------------------------
 # _parse_version
 # ---------------------------------------------------------------------------
+
 
 class TestParseVersion:
     def test_plain_release(self):
@@ -64,13 +63,20 @@ class TestParseVersion:
 # get_latest_release
 # ---------------------------------------------------------------------------
 
+
 class TestGetLatestRelease:
     def test_returns_version_and_apk_url(self):
         data = {
             "tag_name": "v1.2.3",
             "assets": [
-                {"name": "app-release.apk", "browser_download_url": "https://example.com/app.apk"},
-                {"name": "checksums.txt", "browser_download_url": "https://example.com/checksums.txt"},
+                {
+                    "name": "app-release.apk",
+                    "browser_download_url": "https://example.com/app.apk",
+                },
+                {
+                    "name": "checksums.txt",
+                    "browser_download_url": "https://example.com/checksums.txt",
+                },
             ],
         }
         with patch("urllib.request.urlopen", return_value=_make_response(data)):
@@ -94,7 +100,10 @@ class TestGetLatestRelease:
         data = {
             "tag_name": "v1.0.0",
             "assets": [
-                {"name": "source.tar.gz", "browser_download_url": "https://example.com/src.tar.gz"},
+                {
+                    "name": "source.tar.gz",
+                    "browser_download_url": "https://example.com/src.tar.gz",
+                },
             ],
         }
         with patch("urllib.request.urlopen", return_value=_make_response(data)):
@@ -108,7 +117,9 @@ class TestGetLatestRelease:
         assert apk_url is None
 
     def test_returns_fallback_on_url_error(self):
-        with patch("urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")):
+        with patch(
+            "urllib.request.urlopen", side_effect=urllib.error.URLError("timeout")
+        ):
             version, apk_url = get_latest_release()
         assert version is None
         assert apk_url is None
@@ -134,8 +145,14 @@ class TestGetLatestRelease:
         data = {
             "tag_name": "v1.0.0",
             "assets": [
-                {"name": "app-debug.apk", "browser_download_url": "https://example.com/debug.apk"},
-                {"name": "app-release.apk", "browser_download_url": "https://example.com/release.apk"},
+                {
+                    "name": "app-debug.apk",
+                    "browser_download_url": "https://example.com/debug.apk",
+                },
+                {
+                    "name": "app-release.apk",
+                    "browser_download_url": "https://example.com/release.apk",
+                },
             ],
         }
         with patch("urllib.request.urlopen", return_value=_make_response(data)):
@@ -147,30 +164,41 @@ class TestGetLatestRelease:
 # is_update_available
 # ---------------------------------------------------------------------------
 
+
 class TestIsUpdateAvailable:
     def test_update_available_when_latest_is_newer(self):
-        with patch("bubble_mark.updater.get_latest_release", return_value=("9.9.9", "https://example.com/app.apk")):
+        with patch(
+            "bubble_mark.updater.get_latest_release",
+            return_value=("9.9.9", "https://example.com/app.apk"),
+        ):
             available, apk_url = is_update_available()
         assert available is True
         assert apk_url == "https://example.com/app.apk"
 
     def test_no_update_when_versions_match(self):
         current = updater_module.CURRENT_VERSION
-        with patch("bubble_mark.updater.get_latest_release", return_value=(current, "https://example.com/app.apk")):
+        with patch(
+            "bubble_mark.updater.get_latest_release",
+            return_value=(current, "https://example.com/app.apk"),
+        ):
             available, apk_url = is_update_available()
         assert available is False
 
     def test_no_update_when_latest_is_older(self):
         # A server returning a downgraded version must not prompt an update.
         with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0"):
-            with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)):
+            with patch(
+                "bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)
+            ):
                 available, _ = is_update_available()
         assert available is False
 
     def test_partial_version_treated_as_padded(self):
         # "1.2" should compare equal to "1.2.0" and not trigger an update.
         with patch("bubble_mark.updater.CURRENT_VERSION", "1.2.0"):
-            with patch("bubble_mark.updater.get_latest_release", return_value=("1.2", None)):
+            with patch(
+                "bubble_mark.updater.get_latest_release", return_value=("1.2", None)
+            ):
                 available, _ = is_update_available()
         assert available is False
 
@@ -185,20 +213,28 @@ class TestIsUpdateAvailable:
     def test_no_update_when_current_is_dev_build(self):
         # A dev build of 1.0.0 should not be prompted to update to 1.0.0 release.
         with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0.dev3+gabcdef"):
-            with patch("bubble_mark.updater.get_latest_release", return_value=("1.0.0", None)):
+            with patch(
+                "bubble_mark.updater.get_latest_release", return_value=("1.0.0", None)
+            ):
                 available, _ = is_update_available()
         assert available is False
 
     def test_update_available_when_dev_build_has_newer_release(self):
         # A dev build of 1.0.0 should still be prompted to update to 1.1.0.
         with patch("bubble_mark.updater.CURRENT_VERSION", "1.0.0.dev3+gabcdef"):
-            with patch("bubble_mark.updater.get_latest_release", return_value=("1.1.0", "https://example.com/app.apk")):
+            with patch(
+                "bubble_mark.updater.get_latest_release",
+                return_value=("1.1.0", "https://example.com/app.apk"),
+            ):
                 available, apk_url = is_update_available()
         assert available is True
         assert apk_url == "https://example.com/app.apk"
 
     def test_apk_url_propagated(self):
-        with patch("bubble_mark.updater.get_latest_release", return_value=("2.0.0", "https://example.com/app.apk")):
+        with patch(
+            "bubble_mark.updater.get_latest_release",
+            return_value=("2.0.0", "https://example.com/app.apk"),
+        ):
             _, apk_url = is_update_available()
         assert apk_url == "https://example.com/app.apk"
 

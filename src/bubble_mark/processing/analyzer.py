@@ -1,4 +1,5 @@
 """Bubble state analyser: determine whether bubbles are filled."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -53,9 +54,7 @@ class BubbleAnalyzer:
         dark_fraction = np.mean(gray < 128)
         return bool(dark_fraction >= self.fill_threshold)
 
-    def analyze_answer_row(
-        self, image: np.ndarray, bubbles: list[tuple]
-    ) -> str:
+    def analyze_answer_row(self, image: np.ndarray, bubbles: list[tuple]) -> str:
         """Analyse one question row and return the selected answer string.
 
         Returns
@@ -66,7 +65,8 @@ class BubbleAnalyzer:
             * ``" "`` if no bubble is filled.
         """
         filled = [
-            idx for idx, region in enumerate(bubbles)
+            idx
+            for idx, region in enumerate(bubbles)
             if self.analyze_bubble(image, region)
         ]
         if len(filled) == 0:
@@ -75,9 +75,7 @@ class BubbleAnalyzer:
             return "M"
         return str(filled[0] + 1)
 
-    def analyze_id_column(
-        self, image: np.ndarray, bubbles: list[tuple]
-    ) -> str:
+    def analyze_id_column(self, image: np.ndarray, bubbles: list[tuple]) -> str:
         """Analyse one ID digit column and return the recognised digit string.
 
         Parameters
@@ -93,7 +91,8 @@ class BubbleAnalyzer:
             * ``" "`` if no bubble is filled.
         """
         filled = [
-            idx for idx, region in enumerate(bubbles)
+            idx
+            for idx, region in enumerate(bubbles)
             if self.analyze_bubble(image, region)
         ]
         if len(filled) == 0:

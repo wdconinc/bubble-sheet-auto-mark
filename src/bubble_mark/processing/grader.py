@@ -1,4 +1,5 @@
 """Full grading pipeline: detect → locate → analyse → grade."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Optional
@@ -46,7 +47,6 @@ class BubbleSheetGrader:
         Returns *None* if the sheet cannot be detected or processed.
         """
         # Import here to avoid circular imports at module load time
-        from bubble_mark.models.grade_result import GradeResult
 
         normalised = self.detector.detect(image)
         if normalised is None:
@@ -66,9 +66,7 @@ class BubbleSheetGrader:
 
         return self.grade_answers(detected_answers, student_id)
 
-    def grade_answers(
-        self, detected_answers: str, student_id: str
-    ) -> "GradeResult":
+    def grade_answers(self, detected_answers: str, student_id: str) -> "GradeResult":
         """Build a :class:`GradeResult` from pre-detected *detected_answers*.
 
         Parameters
