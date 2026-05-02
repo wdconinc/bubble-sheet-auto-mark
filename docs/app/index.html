@@ -200,6 +200,37 @@
     .status-pill.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
     .status-pill.error   { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
 
+    /* ── Reference sheet canvas ── */
+    #ref-sheet-section {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--border);
+    }
+    #ref-sheet-section h3 {
+      font-size: .875rem; font-weight: 600; color: var(--muted);
+      margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em;
+    }
+    #ref-canvas-wrap {
+      position: relative; display: inline-block;
+      max-width: 100%; margin-top: 10px;
+    }
+    #ref-canvas {
+      display: block; max-width: 100%;
+      border: 1px solid var(--border); border-radius: 4px;
+      cursor: crosshair; touch-action: none;
+    }
+    #ref-canvas.mode-answer { cursor: crosshair; border-color: var(--primary); }
+    #ref-canvas.mode-id     { cursor: crosshair; border-color: #ea580c; }
+    .region-legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: .8rem; color: var(--muted); margin-top: 8px; }
+    .region-legend span { display: flex; align-items: center; gap: 4px; }
+    .legend-swatch {
+      display: inline-block; width: 13px; height: 13px;
+      border-radius: 2px; border-width: 2px; border-style: solid;
+    }
+    .swatch-answer { background: rgba(37,99,235,.18); border-color: #2563eb; }
+    .swatch-id     { background: rgba(234,88,12,.18);  border-color: #ea580c; }
+    #ref-mode-hint { font-size: .8rem; color: var(--muted); min-height: 1.2em; margin-top: 4px; }
+
     /* ── Image preview ── */
     #preview-area {
       margin-top: 12px;
@@ -336,6 +367,39 @@
           <input type="text" id="answer-key" placeholder="e.g. 134521345213452…">
         </div>
       </div>
+
+      <!-- ── Reference sheet ── -->
+      <div id="ref-sheet-section">
+        <h3>Reference Sheet</h3>
+        <p style="font-size:.8rem;color:var(--muted);margin-bottom:10px;">
+          Upload a scan of a <strong>blank</strong> bubble sheet, then drag rectangles
+          on the preview to mark the <span style="color:#2563eb;font-weight:600">answer bubbles</span>
+          and <span style="color:#ea580c;font-weight:600">student-ID bubbles</span> regions.
+          These regions improve detection accuracy.
+        </p>
+        <div class="btn-row">
+          <button class="btn-ghost" id="btn-ref-upload" type="button">📄 Upload Blank Sheet</button>
+          <input type="file" id="ref-file-input" accept="image/*" hidden>
+          <button class="btn-ghost" id="btn-ref-clear" type="button" style="display:none">🗑 Clear Regions</button>
+        </div>
+
+        <div id="ref-canvas-section" style="display:none">
+          <div class="btn-row" style="margin-top:10px">
+            <button class="btn-ghost" id="btn-draw-answer" type="button">✏ Draw Answer Region</button>
+            <button class="btn-ghost" id="btn-draw-id" type="button">✏ Draw ID Region</button>
+            <button class="btn-ghost" id="btn-clear-answer" type="button">✕ Clear Answer</button>
+            <button class="btn-ghost" id="btn-clear-id" type="button">✕ Clear ID</button>
+          </div>
+          <div id="ref-mode-hint">Select a mode above, then drag a rectangle on the sheet preview.</div>
+          <div id="ref-canvas-wrap">
+            <canvas id="ref-canvas"></canvas>
+          </div>
+          <div class="region-legend">
+            <span><span class="legend-swatch swatch-answer"></span>Answer region</span>
+            <span><span class="legend-swatch swatch-id"></span>ID region</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -437,7 +501,8 @@ from bubble_mark.export.csv_exporter import CSVExporter
 
 
 def grade_sheet(image_bytes_js, num_questions, num_choices,
-                num_id_digits, fill_threshold, answer_key_str):
+                num_id_digits, fill_threshold, answer_key_str,
+                answer_region_json='null', id_region_json='null'):
     """Grade one bubble sheet image.
 
     Parameters
@@ -445,6 +510,10 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
     image_bytes_js:
         A JavaScript Uint8Array (JsProxy) containing raw image bytes
         (JPEG / PNG / BMP).  Converted to Python bytearray via .to_py().
+    answer_region_json:
+        JSON string ``[x1, y1, x2, y2]`` (normalized 0–1) or ``'null'``.
+    id_region_json:
+        JSON string ``[x1, y1, x2, y2]`` (normalized 0–1) or ``'null'``.
     Returns a JSON string encoding the result dict, or the string ``'null'``
     when no sheet could be detected.
     """
@@ -460,8 +529,11 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
         'id_choices_per_digit': 10,
     }
 
+    answer_region = json.loads(str(answer_region_json))  # list or None
+    id_region     = json.loads(str(id_region_json))      # list or None
+
     answer_key = AnswerKey(str(answer_key_str)) if answer_key_str else None
-    detector = BubbleSheetDetector(layout)
+    detector = BubbleSheetDetector(layout, answer_region=answer_region, id_region=id_region)
     analyzer = BubbleAnalyzer(float(fill_threshold))
     grader = BubbleSheetGrader(answer_key, detector, analyzer)
 
@@ -554,6 +626,15 @@ let results        = [];     // accumulated GradeResult dicts
 let pendingBytes   = null;   // Uint8Array of the currently loaded image
 let cameraStream   = null;
 
+// Reference-sheet region state
+let refImageEl     = null;   // HTMLImageElement for the uploaded blank sheet
+let drawMode       = null;   // 'answer' | 'id' | null
+let answerRegion   = null;   // [x1, y1, x2, y2] normalised 0-1, or null
+let idRegion       = null;   // [x1, y1, x2, y2] normalised 0-1, or null
+let drawStart      = null;   // {x, y} in canvas pixels
+let drawCurrent    = null;   // {x, y} in canvas pixels
+let isDrawing      = false;
+
 // ── DOM ──────────────────────────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -582,6 +663,19 @@ const resultsTable   = $('results-table');
 const resultsTbody   = $('results-tbody');
 const btnCsv         = $('btn-csv');
 const btnClear       = $('btn-clear');
+
+// Reference-sheet elements
+const btnRefUpload    = $('btn-ref-upload');
+const refFileInput    = $('ref-file-input');
+const btnRefClear     = $('btn-ref-clear');
+const refCanvasSection = $('ref-canvas-section');
+const refCanvas       = $('ref-canvas');
+const refCtx          = refCanvas.getContext('2d');
+const refModeHint     = $('ref-mode-hint');
+const btnDrawAnswer   = $('btn-draw-answer');
+const btnDrawId       = $('btn-draw-id');
+const btnClearAnswer  = $('btn-clear-answer');
+const btnClearId      = $('btn-clear-id');
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -683,6 +777,8 @@ function getSettings() {
     numIdDigits:   parseInt($('num-id-digits').value)  || 9,
     fillThreshold: parseFloat($('fill-threshold').value) || 0.5,
     answerKey:     $('answer-key').value.trim(),
+    answerRegion:  answerRegion,   // [x1, y1, x2, y2] or null
+    idRegion:      idRegion,       // [x1, y1, x2, y2] or null
   };
 }
 
@@ -911,7 +1007,9 @@ btnGrade.addEventListener('click', async () => {
     const resultJson = gradeSheetFn(
       pendingBytes,
       s.numQuestions, s.numChoices, s.numIdDigits,
-      s.fillThreshold, s.answerKey
+      s.fillThreshold, s.answerKey,
+      JSON.stringify(s.answerRegion),
+      JSON.stringify(s.idRegion)
     );
 
     const result = JSON.parse(resultJson);
@@ -997,6 +1095,169 @@ btnCsv.addEventListener('click', async () => {
     setStatus(`CSV export error: ${err.message}`, 'error');
   }
 });
+
+// ── Reference sheet upload & region selection ────────────────────────────────
+
+btnRefUpload.addEventListener('click', () => refFileInput.click());
+
+refFileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  refFileInput.value = '';
+
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    // Fit the canvas to the container width while preserving aspect ratio.
+    const maxW = refCanvas.parentElement.clientWidth || 600;
+    const scale = Math.min(1, maxW / img.naturalWidth);
+    refCanvas.width  = Math.round(img.naturalWidth  * scale);
+    refCanvas.height = Math.round(img.naturalHeight * scale);
+    refImageEl = img;
+    redrawRefCanvas();
+    refCanvasSection.style.display = 'block';
+    btnRefClear.style.display = 'inline-flex';
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+});
+
+btnRefClear.addEventListener('click', () => {
+  refImageEl  = null;
+  drawMode    = null;
+  answerRegion = null;
+  idRegion     = null;
+  drawStart    = null;
+  drawCurrent  = null;
+  isDrawing    = false;
+  refCanvasSection.style.display = 'none';
+  btnRefClear.style.display = 'none';
+  setDrawMode(null);
+});
+
+btnDrawAnswer.addEventListener('click', () => setDrawMode(drawMode === 'answer' ? null : 'answer'));
+btnDrawId.addEventListener('click',     () => setDrawMode(drawMode === 'id'     ? null : 'id'));
+
+btnClearAnswer.addEventListener('click', () => { answerRegion = null; redrawRefCanvas(); });
+btnClearId.addEventListener('click',     () => { idRegion = null;     redrawRefCanvas(); });
+
+function setDrawMode(mode) {
+  drawMode = mode;
+  refCanvas.className = mode ? `mode-${mode}` : '';
+  btnDrawAnswer.style.fontWeight = mode === 'answer' ? '700' : '';
+  btnDrawId.style.fontWeight     = mode === 'id'     ? '700' : '';
+  if (mode === 'answer') {
+    refModeHint.textContent = 'Drag to draw the answer-bubbles region (blue).';
+  } else if (mode === 'id') {
+    refModeHint.textContent = 'Drag to draw the student-ID-bubbles region (orange).';
+  } else {
+    refModeHint.textContent = 'Select a mode above, then drag a rectangle on the sheet preview.';
+  }
+}
+
+function getCanvasPos(e) {
+  const rect = refCanvas.getBoundingClientRect();
+  const scaleX = refCanvas.width  / rect.width;
+  const scaleY = refCanvas.height / rect.height;
+  // Support both mouse events and touch events (touchstart/touchmove use
+  // `touches`; touchend uses `changedTouches` since `touches` may be empty).
+  const touch = e.changedTouches ? e.changedTouches[0] : (e.touches ? e.touches[0] : null);
+  const clientX = touch ? touch.clientX : e.clientX;
+  const clientY = touch ? touch.clientY : e.clientY;
+  return {
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top)  * scaleY,
+  };
+}
+
+function onPointerDown(e) {
+  if (!drawMode || !refImageEl) return;
+  isDrawing   = true;
+  drawStart   = getCanvasPos(e);
+  drawCurrent = drawStart;
+  e.preventDefault();
+}
+
+function onPointerMove(e) {
+  if (!isDrawing) return;
+  drawCurrent = getCanvasPos(e);
+  redrawRefCanvas();
+  e.preventDefault();
+}
+
+function onPointerUp(e) {
+  if (!isDrawing) return;
+  isDrawing = false;
+  drawCurrent = getCanvasPos(e);
+
+  const rx1 = Math.max(0, Math.min(drawStart.x, drawCurrent.x) / refCanvas.width);
+  const ry1 = Math.max(0, Math.min(drawStart.y, drawCurrent.y) / refCanvas.height);
+  const rx2 = Math.min(1, Math.max(drawStart.x, drawCurrent.x) / refCanvas.width);
+  const ry2 = Math.min(1, Math.max(drawStart.y, drawCurrent.y) / refCanvas.height);
+
+  // Only store if the rectangle is non-degenerate
+  if (rx2 - rx1 > 0.01 && ry2 - ry1 > 0.01) {
+    const region = [
+      parseFloat(rx1.toFixed(4)), parseFloat(ry1.toFixed(4)),
+      parseFloat(rx2.toFixed(4)), parseFloat(ry2.toFixed(4)),
+    ];
+    if (drawMode === 'answer') answerRegion = region;
+    else if (drawMode === 'id') idRegion = region;
+  }
+
+  drawStart   = null;
+  drawCurrent = null;
+  redrawRefCanvas();
+  e.preventDefault();
+}
+
+refCanvas.addEventListener('mousedown',  onPointerDown);
+refCanvas.addEventListener('mousemove',  onPointerMove);
+refCanvas.addEventListener('mouseup',    onPointerUp);
+refCanvas.addEventListener('touchstart', onPointerDown, { passive: false });
+refCanvas.addEventListener('touchmove',  onPointerMove, { passive: false });
+refCanvas.addEventListener('touchend',   onPointerUp,   { passive: false });
+
+function redrawRefCanvas() {
+  if (!refImageEl) return;
+  refCtx.clearRect(0, 0, refCanvas.width, refCanvas.height);
+  refCtx.drawImage(refImageEl, 0, 0, refCanvas.width, refCanvas.height);
+
+  function drawRegion(region, stroke, fill) {
+    if (!region) return;
+    const [x1, y1, x2, y2] = region;
+    const px = x1 * refCanvas.width,  py = y1 * refCanvas.height;
+    const pw = (x2 - x1) * refCanvas.width, ph = (y2 - y1) * refCanvas.height;
+    refCtx.save();
+    refCtx.strokeStyle = stroke;
+    refCtx.fillStyle   = fill;
+    refCtx.lineWidth   = 2;
+    refCtx.fillRect(px, py, pw, ph);
+    refCtx.strokeRect(px, py, pw, ph);
+    refCtx.restore();
+  }
+
+  drawRegion(answerRegion, '#2563eb', 'rgba(37,99,235,.18)');
+  drawRegion(idRegion,     '#ea580c', 'rgba(234,88,12,.18)');
+
+  // Draw the live drag rectangle
+  if (isDrawing && drawStart && drawCurrent && drawMode) {
+    const stroke = drawMode === 'answer' ? '#2563eb' : '#ea580c';
+    const fill   = drawMode === 'answer' ? 'rgba(37,99,235,.10)' : 'rgba(234,88,12,.10)';
+    const x = Math.min(drawStart.x, drawCurrent.x);
+    const y = Math.min(drawStart.y, drawCurrent.y);
+    const w = Math.abs(drawCurrent.x - drawStart.x);
+    const h = Math.abs(drawCurrent.y - drawStart.y);
+    refCtx.save();
+    refCtx.strokeStyle = stroke;
+    refCtx.fillStyle   = fill;
+    refCtx.lineWidth   = 2;
+    refCtx.setLineDash([5, 4]);
+    refCtx.fillRect(x, y, w, h);
+    refCtx.strokeRect(x, y, w, h);
+    refCtx.restore();
+  }
+}
 
 // ── Collapsible settings ─────────────────────────────────────────────────────
 
