@@ -114,7 +114,7 @@ class TestGetLatestRelease:
 # ---------------------------------------------------------------------------
 
 class TestIsUpdateAvailable:
-    def test_update_available_when_versions_differ(self):
+    def test_update_available_when_latest_is_newer(self):
         with patch("bubble_mark.updater.get_latest_release", return_value=("9.9.9", "https://example.com/app.apk")):
             available, apk_url = is_update_available()
         assert available is True
@@ -126,13 +126,19 @@ class TestIsUpdateAvailable:
             available, apk_url = is_update_available()
         assert available is False
 
+    def test_no_update_when_latest_is_older(self):
+        # A server returning a downgraded version must not prompt an update.
+        with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.1", None)):
+            available, _ = is_update_available()
+        # 0.0.1 is not newer than the current version (>= 0.1.0)
+        assert available is False
+
     def test_no_update_on_network_error(self):
-        # get_latest_release returns "0.0.0" on error; only "up-to-date" if
-        # CURRENT_VERSION also happens to be "0.0.0" — otherwise this still
-        # shows as an "update available". The important thing is no exception.
+        # get_latest_release returns "0.0.0" on error; "0.0.0" is older than
+        # the current version so no spurious update prompt is shown.
         with patch("bubble_mark.updater.get_latest_release", return_value=("0.0.0", None)):
             available, apk_url = is_update_available()
-        # apk_url should be None, no exception raised
+        assert available is False
         assert apk_url is None
 
     def test_apk_url_propagated(self):

@@ -48,10 +48,18 @@ def get_latest_release() -> tuple[str, str | None]:
         return "0.0.0", None
 
 
+def _parse_version(v: str) -> tuple[int, ...]:
+    """Parse a dotted-version string into a tuple of ints for comparison."""
+    try:
+        return tuple(int(x) for x in v.split("."))
+    except ValueError:
+        return (0, 0, 0)
+
+
 def is_update_available() -> tuple[bool, str | None]:
     """Return ``(update_available, apk_url)`` by comparing against the latest release."""
     latest_version, apk_url = get_latest_release()
-    return latest_version != CURRENT_VERSION, apk_url
+    return _parse_version(latest_version) > _parse_version(CURRENT_VERSION), apk_url
 
 
 def check_and_prompt_update(app_instance) -> None:  # noqa: ANN001
