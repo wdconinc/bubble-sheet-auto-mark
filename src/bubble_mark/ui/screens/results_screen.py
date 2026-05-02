@@ -25,18 +25,27 @@ def build_results_screen(app: BubbleMarkApp) -> toga.Box:
     _show_annotated = False
     if app.results and app.results[0].annotated_image is not None:
         try:
+            import logging
+
             import numpy as np
             from PIL import Image as PILImage
 
             ann = app.results[0].annotated_image
-            rgb = ann[:, :, ::-1].copy() if ann.ndim == 3 else ann
-            pil = PILImage.fromarray(rgb.astype(np.uint8), mode="RGB")
+            if ann.ndim == 3 and ann.shape[2] >= 3:
+                rgb = ann[:, :, :3][:, :, ::-1].copy()  # BGR → RGB
+                pil = PILImage.fromarray(rgb.astype(np.uint8), mode="RGB")
+            else:
+                gray = ann if ann.ndim == 2 else ann[:, :, 0]
+                pil = PILImage.fromarray(gray.astype(np.uint8), mode="L").convert("RGB")
             buf = io.BytesIO()
             pil.save(buf, format="PNG")
             annotated_view.image = toga.Image(data=buf.getvalue())
             _show_annotated = True
-        except Exception:
-            pass
+        except (ImportError, ValueError, OSError) as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Could not render annotated image: %s", exc
+            )
 
     table = toga.Table(
         headings=["Student ID", "Answers", "Score"],

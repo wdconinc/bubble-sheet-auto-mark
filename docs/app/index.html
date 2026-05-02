@@ -545,9 +545,10 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
 
     # Encode the annotated overlay image as a base64 PNG so JavaScript can
     # draw it on the preview canvas without any additional round-trips.
-    if result.annotated_image is not None:
+    ann = result.annotated_image
+    if ann is not None and ann.ndim == 3 and ann.shape[2] >= 3:
         import base64
-        annotated_rgb = result.annotated_image[:, :, ::-1].copy()  # BGR → RGB
+        annotated_rgb = ann[:, :, :3][:, :, ::-1].copy()  # BGR → RGB
         pil_ann = PILImage.fromarray(annotated_rgb, mode='RGB')
         buf = io.BytesIO()
         pil_ann.save(buf, format='PNG')
