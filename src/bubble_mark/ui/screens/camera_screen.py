@@ -226,7 +226,11 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
             return
 
         bgr = rgb[:, :, ::-1].copy()  # RGB → BGR (pure numpy)
-        detector = BubbleSheetDetector(app.app_settings.layout_config)
+        detector = BubbleSheetDetector(
+            app.app_settings.layout_config,
+            answer_region=app.app_settings.answer_region,
+            id_region=app.app_settings.id_region,
+        )
         analyzer = BubbleAnalyzer(app.app_settings.fill_threshold)
         grader = BubbleSheetGrader(app.answer_key, detector, analyzer)
         try:

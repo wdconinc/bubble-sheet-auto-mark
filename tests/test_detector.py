@@ -23,6 +23,19 @@ class TestBubbleSheetDetectorInit:
         # Unspecified keys keep defaults
         assert d.layout_config["num_id_digits"] == 9
 
+    def test_default_regions_are_none(self):
+        d = BubbleSheetDetector()
+        assert d.answer_region is None
+        assert d.id_region is None
+
+    def test_custom_regions_stored(self):
+        d = BubbleSheetDetector(
+            answer_region=[0.0, 0.0, 1.0, 0.72],
+            id_region=[0.0, 0.74, 1.0, 1.0],
+        )
+        assert d.answer_region == [0.0, 0.0, 1.0, 0.72]
+        assert d.id_region == [0.0, 0.74, 1.0, 1.0]
+
 
 class TestDetect:
     def test_returns_ndarray_for_blank_sheet(self, blank_sheet):
@@ -76,6 +89,34 @@ class TestLocateAnswerBubbles:
                 assert x + bw <= w + 5  # allow tiny rounding
                 assert bw > 0 and bh > 0
 
+    def test_custom_answer_region_grid_size(self):
+        """Custom answer_region must still return the correct grid dimensions."""
+        d = BubbleSheetDetector(
+            {"num_questions": 5, "num_choices": 5},
+            answer_region=[0.0, 0.0, 1.0, 0.6],
+        )
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        grid = d.locate_answer_bubbles(normalised)
+        assert len(grid) == 5
+        for row in grid:
+            assert len(row) == 5
+
+    def test_custom_answer_region_y_coords_bounded(self):
+        """Bubbles from a custom region should lie within the region's y-range."""
+        region = [0.0, 0.0, 1.0, 0.6]
+        d = BubbleSheetDetector(
+            {"num_questions": 5, "num_choices": 5},
+            answer_region=region,
+        )
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        max_y = int(normalised.shape[0] * region[3])
+        grid = d.locate_answer_bubbles(normalised)
+        for row in grid:
+            for x, y, bw, bh in row:
+                assert y + bh <= max_y + 5  # allow tiny rounding
+
 
 class TestLocateIdBubbles:
     def test_returns_columns_of_correct_size(self):
@@ -114,6 +155,33 @@ class TestLocateIdBubbles:
                     f"start at {id_section_start}"
                 )
 
+    def test_custom_id_region_columns_size(self):
+        """Custom id_region must still return the correct number of columns/rows."""
+        d = BubbleSheetDetector(
+            {"num_id_digits": 9, "id_choices_per_digit": 10},
+            id_region=[0.0, 0.74, 1.0, 1.0],
+        )
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        columns = d.locate_id_bubbles(normalised)
+        assert len(columns) == 9
+        for col in columns:
+            assert len(col) == 10
+
+    def test_custom_id_region_y_coords_within_region(self):
+        """ID bubbles from a custom region should start within the region's y-range."""
+        region = [0.0, 0.74, 1.0, 1.0]
+        d = BubbleSheetDetector(id_region=region)
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        id_section_start = int(normalised.shape[0] * region[1])
+        columns = d.locate_id_bubbles(normalised)
+        for col in columns:
+            for x, y, bw, bh in col:
+                assert y >= id_section_start, (
+                    f"ID bubble y={y} is above custom region start {id_section_start}"
+                )
+
 
 class TestSectionRects:
     def test_answer_section_rect_shape(self):
@@ -147,3 +215,29 @@ class TestSectionRects:
         _, _, _, a_y2 = d.answer_section_rect(normalised)
         _, i_y1, _, _ = d.id_section_rect(normalised)
         assert a_y2 <= i_y1
+
+    def test_answer_section_rect_respects_custom_region(self):
+        """answer_section_rect should reflect the configured answer_region."""
+        region = [0.0, 0.0, 1.0, 0.6]
+        d = BubbleSheetDetector(answer_region=region)
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        h, w = normalised.shape[:2]
+        x1, y1, x2, y2 = d.answer_section_rect(normalised)
+        assert x1 == int(w * region[0])
+        assert y1 == int(h * region[1])
+        assert x2 == int(w * region[2])
+        assert y2 == int(h * region[3])
+
+    def test_id_section_rect_respects_custom_region(self):
+        """id_section_rect should reflect the configured id_region."""
+        region = [0.0, 0.74, 1.0, 1.0]
+        d = BubbleSheetDetector(id_region=region)
+        sheet = create_blank_sheet()
+        normalised = d.detect(sheet)
+        h, w = normalised.shape[:2]
+        x1, y1, x2, y2 = d.id_section_rect(normalised)
+        assert x1 == int(w * region[0])
+        assert y1 == int(h * region[1])
+        assert x2 == int(w * region[2])
+        assert y2 == int(h * region[3])
