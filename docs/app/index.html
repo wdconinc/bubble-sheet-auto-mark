@@ -476,6 +476,7 @@
         <button class="btn-primary" id="btn-upload" disabled>📁 Upload Images</button>
         <input type="file" id="file-input" accept="image/*" multiple hidden>
         <button class="btn-ghost" id="btn-camera" disabled>📷 Use Camera</button>
+        <button class="btn-danger" id="btn-clear-images" disabled>🗑 Clear Images</button>
         <button class="btn-success" id="btn-grade" disabled>▶ Grade Sheets</button>
       </div>
 
@@ -811,6 +812,7 @@ const resultsTable   = $('results-table');
 const resultsTbody   = $('results-tbody');
 const btnCsv         = $('btn-csv');
 const btnClear       = $('btn-clear');
+const btnClearImages = $('btn-clear-images');
 
 // Reference-sheet elements
 const btnRefUpload    = $('btn-ref-upload');
@@ -1027,6 +1029,7 @@ function addImageFiles(fileList) {
 
     updatePendingInfo();
     btnGrade.disabled = !gradeSheetFn;
+    btnClearImages.disabled = false;
     setStatus(
       loaded.length === 1
         ? 'Image loaded — click "Grade Sheets" to process.'
@@ -1054,6 +1057,20 @@ fileInput.addEventListener('change', (e) => {
   stopCamera();
   addImageFiles(e.target.files);
   fileInput.value = '';
+});
+
+btnClearImages.addEventListener('click', () => {
+  pendingFiles = [];
+  btnGrade.disabled = true;
+  btnClearImages.disabled = true;
+  previewCanvas.width  = 0;
+  previewCanvas.height = 0;
+  previewCanvas.style.display = 'none';
+  previewHint.style.display   = '';
+  previewArea.classList.remove('has-image');
+  pendingInfo.hidden = true;
+  idbDelete(IDB_KEY_PENDING).catch(() => {});
+  setStatus('', '');
 });
 
 // ── Camera ───────────────────────────────────────────────────────────────────
@@ -1131,6 +1148,7 @@ btnCapture.addEventListener('click', () => {
       previewArea.style.display = '';
       updatePendingInfo();
       btnGrade.disabled = !gradeSheetFn;
+      btnClearImages.disabled = false;
       const count = pendingFiles.length;
       setStatus(
         count === 1
@@ -1351,6 +1369,7 @@ async function restorePendingImage() {
         previewCanvas.style.display = 'block';
         previewHint.style.display   = 'none';
         previewArea.classList.add('has-image');
+        btnClearImages.disabled = false;
         URL.revokeObjectURL(url);
         resolve();
       };
