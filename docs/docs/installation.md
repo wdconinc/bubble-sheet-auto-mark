@@ -94,4 +94,4 @@ pip install -e ".[dev]"
 python -m pytest tests/ -v
 ```
 
-All tests use synthetic images and do **not** require a camera or display. See the [project layout]({{ site.baseurl }}/#project-layout) for details.
+All tests use synthetic images and do **not** require a camera or display. See the [project layout](configuration#project-layout) for details.
