@@ -941,32 +941,44 @@ function openIDB() {
 
 function idbPut(key, value) {
   if (!idb) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const tx = idb.transaction(IDB_STORE_NAME, 'readwrite');
-    tx.objectStore(IDB_STORE_NAME).put(value, key);
-    tx.oncomplete = resolve;
-    tx.onerror    = (e) => reject(e.target.error);
-  });
+  try {
+    return new Promise((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE_NAME, 'readwrite');
+      tx.objectStore(IDB_STORE_NAME).put(value, key);
+      tx.oncomplete = resolve;
+      tx.onerror    = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return Promise.reject(e);
+  }
 }
 
 function idbGet(key) {
   if (!idb) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const tx  = idb.transaction(IDB_STORE_NAME, 'readonly');
-    const req = tx.objectStore(IDB_STORE_NAME).get(key);
-    req.onsuccess = (e) => resolve(e.target.result);
-    req.onerror   = (e) => reject(e.target.error);
-  });
+  try {
+    return new Promise((resolve, reject) => {
+      const tx  = idb.transaction(IDB_STORE_NAME, 'readonly');
+      const req = tx.objectStore(IDB_STORE_NAME).get(key);
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return Promise.reject(e);
+  }
 }
 
 function idbDelete(key) {
   if (!idb) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const tx = idb.transaction(IDB_STORE_NAME, 'readwrite');
-    tx.objectStore(IDB_STORE_NAME).delete(key);
-    tx.oncomplete = resolve;
-    tx.onerror    = (e) => reject(e.target.error);
-  });
+  try {
+    return new Promise((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE_NAME, 'readwrite');
+      tx.objectStore(IDB_STORE_NAME).delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror    = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return Promise.reject(e);
+  }
 }
 
 function saveSettings() {
