@@ -11,6 +11,7 @@ rest of the workflow can be exercised without camera hardware.
 from __future__ import annotations
 
 import io
+import logging
 import sys
 from typing import TYPE_CHECKING
 
@@ -21,6 +22,8 @@ from toga.style.pack import COLUMN, ROW
 
 if TYPE_CHECKING:
     from bubble_mark.ui.app import BubbleMarkApp
+
+logger = logging.getLogger(__name__)
 
 
 def _is_android() -> bool:
@@ -136,8 +139,10 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
             from bubble_mark.ui.camerax_bridge import start_camera
             # start_camera is idempotent; repeated taps are safe.
             status_label.text = "Starting camera…"
+            logger.info("Opening camera (Android CameraX).")
             start_camera(_on_frame)
         else:
+            logger.info("Desktop: opening file-import dialog.")
             _import_from_file()
 
     def _import_from_file() -> None:
@@ -147,20 +152,24 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
                     title="Open bubble-sheet image",
                     file_types=["jpg", "jpeg", "png", "bmp"],
                 )
-            except Exception:
-                status_label.text = "File import cancelled."
+            except Exception as exc:
+                status_label.text = "Error opening file dialog."
+                logger.exception("File dialog raised an unexpected error: %s", exc)
                 return
             if result is None:
                 status_label.text = "File import cancelled."
+                logger.info("File import cancelled (no selection).")
                 return
             try:
                 from PIL import Image as PILImage
                 with PILImage.open(str(result)) as img:
                     pil = img.convert("RGB")
                 rgb = np.array(pil, dtype=np.uint8)
+                logger.info("Loaded image: %s (%dx%d)", result.name, rgb.shape[1], rgb.shape[0])
                 _on_frame(rgb)
                 status_label.text = f"Loaded: {result.name}"
             except Exception as exc:
+                logger.exception("Error loading image: %s", exc)
                 status_label.text = f"Error loading image: {exc}"
 
         import asyncio
@@ -170,7 +179,9 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
         frame = _last_frame[0]
         if frame is None:
             status_label.text = "No frame to capture yet."
+            logger.warning("Capture pressed but no frame is available.")
             return
+        logger.info("Capturing frame for grading.")
         _grade_frame(frame)
 
     def _grade_frame(rgb: np.ndarray) -> None:
@@ -179,11 +190,15 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
             from bubble_mark.processing.detector import BubbleSheetDetector
             from bubble_mark.processing.grader import BubbleSheetGrader
         except ImportError:
-            status_label.text = "Image processing is not available on this platform."
+            msg = "Image processing is not available on this platform."
+            status_label.text = msg
+            logger.error(msg)
             return
 
         if app.answer_key is None:
-            status_label.text = "Please configure an answer key in Settings first."
+            msg = "Please configure an answer key in Settings first."
+            status_label.text = msg
+            logger.warning(msg)
             return
 
         bgr = rgb[:, :, ::-1].copy()  # RGB → BGR (pure numpy)
@@ -193,23 +208,27 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
         try:
             result = grader.grade_image(bgr)
             if result is None:
-                status_label.text = "Could not detect a bubble sheet in the image."
+                msg = "Could not detect a bubble sheet in the image."
+                status_label.text = msg
+                logger.warning(msg)
                 return
             app.results = [result]
-            status_label.text = (
-                f"Graded: {result.num_correct}/{result.num_questions} correct."
-            )
+            msg = f"Graded: {result.num_correct}/{result.num_questions} correct."
+            status_label.text = msg
+            logger.info(msg)
             # Stop the camera before navigating away so the CameraX session
             # is not left running against a discarded screen.
             from bubble_mark.ui.camerax_bridge import stop_camera as _stop
             _stop()
             app.go_results()
         except Exception as exc:
+            logger.exception("Grading failed: %s", exc)
             status_label.text = f"Grading failed: {exc}"
 
     def stop_camera(widget: toga.Widget) -> None:
         from bubble_mark.ui.camerax_bridge import stop_camera as _stop
         _stop()
+        logger.info("Camera stopped by user.")
         status_label.text = "Camera stopped."
 
     # ------------------------------------------------------------------ #
