@@ -343,6 +343,24 @@
     #ref-canvas.mode-poly-left,
     #ref-canvas.mode-poly-right  { cursor: cell;       border-color: #0ea5e9; }
 
+    /* Edge-line coordinate inputs */
+    #edge-coords-panel { margin-top: 8px; }
+    .edge-coord-row {
+      display: none; align-items: center; gap: 6px;
+      font-size: .78rem; padding: 3px 0;
+    }
+    .edge-coord-row.has-line { display: flex; }
+    .edge-coord-label {
+      width: 4em; font-weight: 600; color: #7c3aed; flex-shrink: 0;
+    }
+    .edge-coord-input {
+      width: 5em; padding: 2px 4px; border: 1px solid var(--border);
+      border-radius: 4px; font-size: .78rem; text-align: right;
+      background: var(--bg); color: var(--text);
+    }
+    .edge-coord-input:focus { outline: none; border-color: #7c3aed; }
+    .edge-coord-sep { color: var(--muted); font-size: .75rem; }
+
     /* ── Graded-sheets tab bar ── */
     #graded-tabs-section { margin-top: 12px; }
     #graded-tabs-bar {
@@ -546,6 +564,12 @@
               <button class="btn-ghost" id="btn-poly-clear" type="button" style="display:none">✕ Clear Polylines</button>
             </div>
             <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
+            <div id="edge-coords-panel">
+              <div id="edge-coord-row-top"    class="edge-coord-row"><span class="edge-coord-label">Top</span>    <input type="number" class="edge-coord-input" id="ec-top-x1"    step="1" title="x1" aria-label="Top x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y1"    step="1" title="y1" aria-label="Top y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-top-x2"    step="1" title="x2" aria-label="Top x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y2"    step="1" title="y2" aria-label="Top y2"></div>
+              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bottom</span><input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1" aria-label="Bottom x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1" aria-label="Bottom y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2" aria-label="Bottom x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2" aria-label="Bottom y2"></div>
+              <div id="edge-coord-row-left"   class="edge-coord-row"><span class="edge-coord-label">Left</span>  <input type="number" class="edge-coord-input" id="ec-left-x1"   step="1" title="x1" aria-label="Left x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y1"   step="1" title="y1" aria-label="Left y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-left-x2"   step="1" title="x2" aria-label="Left x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y2"   step="1" title="y2" aria-label="Left y2"></div>
+              <div id="edge-coord-row-right"  class="edge-coord-row"><span class="edge-coord-label">Right</span> <input type="number" class="edge-coord-input" id="ec-right-x1"  step="1" title="x1" aria-label="Right x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y1"  step="1" title="y1" aria-label="Right y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-right-x2"  step="1" title="x2" aria-label="Right x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y2"  step="1" title="y2" aria-label="Right y2"></div>
+            </div>
             <div class="btn-row" style="margin-top:6px">
               <button class="btn-primary" id="btn-apply-correction"   type="button" disabled>✓ Apply Distortion Correction →</button>
             </div>
@@ -573,6 +597,7 @@
           <div id="ref-region-panel" style="display:none">
             <p class="ref-step-label">Step 3: Select bubble regions and detect grid</p>
             <div class="btn-row">
+              <button class="btn-ghost" id="btn-back-to-edges2" type="button">← Edit Edges</button>
               <button class="btn-ghost" id="btn-back-to-color" type="button">← Edit Color</button>
               <button class="btn-ghost" id="btn-detect-grid"   type="button" disabled>🔍 Detect Grid Lines</button>
             </div>
@@ -1147,6 +1172,7 @@ let refGridLinesData    = null;  // {answer_lines_h, answer_lines_v, id_lines_h,
 
 // Edge-line drawing state
 // refEdgeLines values are [x1,y1,x2,y2] in ORIGINAL IMAGE pixel coordinates
+const EDGE_NAMES = ['top', 'bottom', 'left', 'right'];
 let refEdgeLines  = { top: null, bottom: null, left: null, right: null };
 let edgeDrawMode  = null;     // 'top'|'bottom'|'left'|'right'|null
 let isEdgeDrawing = false;
@@ -1219,9 +1245,16 @@ const btnApplyCorr     = $('btn-apply-correction');
 const refEdgeStatus    = $('ref-edge-status');
 const refColorInfo     = $('ref-color-info');
 const btnBackToEdges   = $('btn-back-to-edges');
+const btnBackToEdges2  = $('btn-back-to-edges2');
 const btnShowEnhanced  = $('btn-show-enhanced');
 const btnBackToColor   = $('btn-back-to-color');
 const btnDetectGrid    = $('btn-detect-grid');
+
+// Edge-line coordinate input elements (keyed by edge name then coord index 0-3)
+const edgeCoordInputs = {};
+EDGE_NAMES.forEach(edge => {
+  edgeCoordInputs[edge] = ['x1', 'y1', 'x2', 'y2'].map(c => $(`ec-${edge}-${c}`));
+});
 
 // Graded-sheet tab elements
 const pendingInfo       = $('pending-info');
@@ -1760,6 +1793,33 @@ function restoreEdgeLines() {
       };
       updateApplyCorrectionBtn();
       updateEdgeStatus();
+      updateAllEdgeInputs();
+    }
+  } catch (_) {}
+}
+
+function restoreEdgePolylines() {
+  try {
+    const raw = localStorage.getItem(LS_EDGE_POLYLINES);
+    if (!raw) return;
+    const ep = JSON.parse(raw);
+    if (ep && typeof ep === 'object') {
+      refEdgePolylines = {
+        top:    Array.isArray(ep.top)    ? ep.top    : null,
+        bottom: Array.isArray(ep.bottom) ? ep.bottom : null,
+        left:   Array.isArray(ep.left)   ? ep.left   : null,
+        right:  Array.isArray(ep.right)  ? ep.right  : null,
+      };
+      // If any polylines were saved, restore polyline mode
+      const hasAny = Object.values(refEdgePolylines).some(v => Array.isArray(v) && v.length >= 2);
+      if (hasAny) {
+        polylineMode = true;
+        $('chk-polyline-mode').checked = true;
+        $('btn-poly-clear').style.display = '';
+      }
+      updateApplyCorrectionBtn();
+      updateEdgeStatus();
+      updateEdgeButtonLabels();
     }
   } catch (_) {}
 }
@@ -2601,6 +2661,7 @@ btnRefClear.addEventListener('click', () => {
   idbDelete(IDB_KEY_REF).catch(() => {});
   saveRegions();
   saveEdgeLines();
+  updateAllEdgeInputs();
   saveEdgePolylines();
 });
 
@@ -2617,7 +2678,7 @@ function setDrawMode(mode) {
   edgeDrawStart   = null;
   edgeDrawCurrent = null;
   polylineDrawEdge = null;
-  ['top', 'bottom', 'left', 'right'].forEach(e => {
+  EDGE_NAMES.forEach(e => {
     const b = $(`btn-edge-${e}`);
     if (b) b.style.fontWeight = '';
   });
@@ -2671,7 +2732,7 @@ function setEdgeDrawMode(edge) {
 
   edgeDrawMode = edge;
   refCanvas.className = edge ? `mode-edge-${edge}` : '';
-  ['top', 'bottom', 'left', 'right'].forEach(e => {
+  EDGE_NAMES.forEach(e => {
     const b = $(`btn-edge-${e}`);
     if (b) b.style.fontWeight = (e === edge) ? '700' : '';
   });
@@ -2756,6 +2817,7 @@ function onPointerUp(e) {
         refEdgeLines[edgeDrawMode] = [ix1, iy1, ix2, iy2];
         updateApplyCorrectionBtn();
         updateEdgeStatus();
+        updateEdgeInputs(edgeDrawMode);
         saveEdgeLines();
       }
     }
@@ -2968,9 +3030,9 @@ function updateDetectGridBtn() {
 /** Update the status text below the edge-line buttons. */
 function updateEdgeStatus() {
   if (polylineMode) {
-    const polyDrawn   = ['top', 'bottom', 'left', 'right']
+    const polyDrawn   = EDGE_NAMES
       .filter(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
-    const polyNeeded  = ['top', 'bottom', 'left', 'right']
+    const polyNeeded  = EDGE_NAMES
       .filter(k => !(Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2));
     if (polyNeeded.length === 0) {
       refEdgeStatus.textContent = '✓ All 4 curved edges defined — click "Apply Distortion Correction".';
@@ -2980,8 +3042,8 @@ function updateEdgeStatus() {
       refEdgeStatus.textContent = `Polylines drawn: ${polyDrawn.join(', ')}. Still needed: ${polyNeeded.join(', ')}.`;
     }
   } else {
-    const drawn     = ['top', 'bottom', 'left', 'right'].filter(k => refEdgeLines[k]);
-    const remaining = ['top', 'bottom', 'left', 'right'].filter(k => !refEdgeLines[k]);
+    const drawn     = EDGE_NAMES.filter(k => refEdgeLines[k]);
+    const remaining = EDGE_NAMES.filter(k => !refEdgeLines[k]);
     if (remaining.length === 0) {
       refEdgeStatus.textContent = '✓ All 4 edge lines defined — click "Apply Distortion Correction".';
     } else if (drawn.length === 0) {
@@ -3008,6 +3070,31 @@ function updateEdgeButtonLabels() {
       btn.textContent = `${icons[edge]} ${labels[edge]} Edge`;
     }
   });
+}
+
+/**
+ * Populate coordinate inputs for one edge from refEdgeLines[edge].
+ * Shows the input row when a line exists, hides it otherwise.
+ */
+function updateEdgeInputs(edge) {
+  const row    = $(`edge-coord-row-${edge}`);
+  const inputs = edgeCoordInputs[edge];
+  const ln     = refEdgeLines[edge];
+  if (!row || !inputs) return;
+  if (ln) {
+    row.classList.add('has-line');
+    // Display coordinates rounded to integers (sub-pixel precision is not
+    // meaningful for alignment), without mutating the source array.
+    inputs.forEach((inp, i) => { inp.value = Math.round(ln[i]); });
+  } else {
+    row.classList.remove('has-line');
+    inputs.forEach(inp => { inp.value = ''; });
+  }
+}
+
+/** Refresh all four edge-line coordinate input rows. */
+function updateAllEdgeInputs() {
+  EDGE_NAMES.forEach(updateEdgeInputs);
 }
 
 /**
@@ -3055,7 +3142,7 @@ function drawEdgeLines() {
   refCtx.shadowColor = 'rgba(0,0,0,.35)';
   refCtx.shadowBlur  = 3;
 
-  ['top', 'bottom', 'left', 'right'].forEach(key => {
+  EDGE_NAMES.forEach(key => {
     const ln = refEdgeLines[key];
     if (!ln) return;
     const ext = extendLineToCanvas(ln[0] * sx, ln[1] * sy, ln[2] * sx, ln[3] * sy,
@@ -3331,7 +3418,7 @@ async function detectRefGrid() {
 
 // ── Edge-line button event handlers ──────────────────────────────────────────
 
-['top', 'bottom', 'left', 'right'].forEach(edge => {
+EDGE_NAMES.forEach(edge => {
   const btn = $(`btn-edge-${edge}`);
   if (!btn) return;
   btn.addEventListener('click', () =>
@@ -3345,6 +3432,7 @@ btnEdgeClear.addEventListener('click', () => {
   polylineDrawEdge = null;
   updateApplyCorrectionBtn();
   updateEdgeStatus();
+  updateAllEdgeInputs();
   updateEdgeButtonLabels();
   saveEdgeLines();
   saveEdgePolylines();
@@ -3402,6 +3490,7 @@ btnAutoEdges.addEventListener('click', async () => {
     };
     updateApplyCorrectionBtn();
     updateEdgeStatus();
+    updateAllEdgeInputs();
     saveEdgeLines();
     redrawRefCanvas();
   } catch (err) {
@@ -3414,9 +3503,36 @@ btnApplyCorr.addEventListener('click', () => applyRefCorrection());
 // ── Step navigation event handlers ───────────────────────────────────────────
 
 btnBackToEdges.addEventListener('click',  () => setRefStep(0));
+btnBackToEdges2.addEventListener('click', () => setRefStep(0));
 btnShowEnhanced.addEventListener('click', () => showEnhancedImage());
 btnBackToColor.addEventListener('click',  () => setRefStep(1));
 btnDetectGrid.addEventListener('click',   () => detectRefGrid());
+
+// ── Coordinate input event handlers ──────────────────────────────────────────
+
+/** Returns a debounced version of fn that delays invocation by `ms` ms. */
+function debounce(fn, ms) {
+  let timer;
+  return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
+}
+
+EDGE_NAMES.forEach(edge => {
+  edgeCoordInputs[edge].forEach((inp, i) => {
+    if (!inp) return;
+    inp.addEventListener('input', debounce(() => {
+      const ln = refEdgeLines[edge];
+      if (!ln) { updateEdgeInputs(edge); return; }
+      const val = Math.round(parseFloat(inp.value));
+      if (!Number.isFinite(val)) { inp.value = Math.round(ln[i]); return; }
+      ln[i] = val;
+      inp.value = val;
+      updateApplyCorrectionBtn();
+      updateEdgeStatus();
+      saveEdgeLines();
+      redrawRefCanvas();
+    }, 200));
+  });
+});
 
 // ── Collapsible settings ─────────────────────────────────────────────────────
 
