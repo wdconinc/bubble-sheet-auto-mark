@@ -763,16 +763,19 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
     bgr  = rgb[:, :, ::-1].copy()
 
     edge_lines = json.loads(str(edge_lines_json))
-    corrected = None
-    if edge_lines and len(edge_lines) == 4:
-        from bubble_mark.processing.distortion import correct_distortion_from_lines
-        corrected = correct_distortion_from_lines(bgr, edge_lines)
-    if corrected is None:
-        contour = find_page_contour(bgr)
+
+    def _apply_correction(img, lines):
+        if lines and len(lines) == 4:
+            from bubble_mark.processing.distortion import correct_distortion_from_lines
+            result = correct_distortion_from_lines(img, lines)
+            if result is not None:
+                return result
+        contour = find_page_contour(img)
         if contour is not None:
-            corrected = perspective_transform(bgr, contour)
-        else:
-            corrected = bgr
+            return perspective_transform(img, contour)
+        return img
+
+    corrected = _apply_correction(bgr, edge_lines)
 
     variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
     best_channel = int(np.argmax(variances))
@@ -1380,6 +1383,7 @@ function saveRegions() {
     localStorage.setItem(LS_ANSWER_REGION, JSON.stringify(answerRegion));
     localStorage.setItem(LS_ID_REGION,     JSON.stringify(idRegion));
   } catch (_) {}
+  updateDetectGridBtn();
 }
 
 function saveEdgeLines() {
@@ -2082,6 +2086,7 @@ function setRefStep(step) {
   }
 
   if (step !== 0) setEdgeDrawMode(null);
+  updateDetectGridBtn();
   redrawRefCanvas();
 }
 
@@ -2090,6 +2095,11 @@ function updateApplyCorrectionBtn() {
   const allDrawn = refEdgeLines.top && refEdgeLines.bottom &&
                    refEdgeLines.left && refEdgeLines.right;
   btnApplyCorr.disabled = !allDrawn;
+}
+
+/** Enable "Detect Grid Lines" only at step 2 when at least one region is defined. */
+function updateDetectGridBtn() {
+  btnDetectGrid.disabled = !(refStep >= 2 && (answerRegion || idRegion));
 }
 
 /** Update the status text below the edge-line buttons. */
@@ -2316,7 +2326,6 @@ async function showEnhancedImage() {
 
     // Reset any previous grid detection when a new enhanced image is shown.
     refGridLinesData = null;
-    btnDetectGrid.disabled = false;
 
     setRefStep(2);
   } catch (err) {
