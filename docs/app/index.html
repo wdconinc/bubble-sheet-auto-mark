@@ -10,8 +10,8 @@
     to any server.
   -->
   <link rel="modulepreload"
-        href="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js"
-        integrity="sha384-Jbsp01bfi5QMUu9TQeO+5kXvBTqk5CQkcSgbSP9rSEDuQnaamwBF7YDKrSsBmfXw"
+        href="https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.mjs"
+        integrity="sha384-99NUXWQ/+GiMxiBXXMq7KS8/e2HFz84pdM4eSR3j9E5Nmqxwv8jiOmm36bKkIGTL"
         crossorigin="anonymous">
 
   <style>
@@ -491,7 +491,7 @@ def detect_contour(image_bytes_js):
      Application JavaScript
      ───────────────────────────────────────────────────────────────────────── -->
 <script type="module">
-import { loadPyodide } from 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js';
+import { loadPyodide } from 'https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.mjs';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
