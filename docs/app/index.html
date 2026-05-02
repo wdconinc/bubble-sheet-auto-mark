@@ -180,12 +180,14 @@
       min-height: 110px;
       border: 2px dashed var(--border);
       border-radius: var(--radius);
-      display: flex; align-items: center; justify-content: center;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
       background: var(--bg); overflow: hidden;
+      padding: 0;
     }
     #preview-area.has-image { border-style: solid; border-color: var(--primary); }
     #preview-canvas { max-width: 100%; max-height: 380px; display: none; border-radius: 4px; }
     #preview-hint { color: var(--muted); font-size: .85rem; text-align: center; padding: 20px; }
+    #live-overlay-badge { padding: 6px 12px 0; align-self: flex-start; }
 
     /* ── Camera ── */
     #camera-section { margin-top: 12px; display: none; }
@@ -193,6 +195,26 @@
       width: 100%; max-height: 380px;
       background: #000; border-radius: var(--radius); display: block;
     }
+
+    /* ── Live overlay indicator ── */
+    .live-badge {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: .75rem; font-weight: 600; letter-spacing: .03em;
+      color: #fff; background: var(--danger);
+      padding: 2px 7px; border-radius: 4px;
+      vertical-align: middle;
+    }
+    .live-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: #fff;
+      animation: livepulse 1s ease-in-out infinite;
+    }
+    @keyframes livepulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .35; }
+    }
+    #preview-area.live { border-style: solid; border-color: var(--danger); }
+    #live-overlay-badge { display: none; }
 
     /* ── Results table ── */
     .table-wrap { overflow-x: auto; margin-top: 10px; }
@@ -308,6 +330,10 @@
       <!-- Image preview -->
       <div id="preview-area">
         <span id="preview-hint">Upload an image or use the camera to get started.</span>
+        <div id="live-overlay-badge">
+          <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+          &nbsp;Green border = page detected
+        </div>
         <canvas id="preview-canvas"></canvas>
       </div>
 
@@ -425,6 +451,32 @@ def build_csv(results_json_str, answer_key_str):
         for r in results_list
     ]
     return CSVExporter().export_to_string(grade_results)
+
+
+def detect_contour(image_bytes_js):
+    """Locate the bubble-sheet page boundary in the given image.
+
+    Parameters
+    ----------
+    image_bytes_js:
+        A JavaScript Uint8Array (JsProxy) containing raw image bytes
+        (JPEG / PNG / BMP).  Converted to Python bytearray via .to_py().
+    Returns a JSON string ``{"contour": [[x,y], [x,y], [x,y], [x,y]]}``
+    when a quadrilateral page boundary is found, or the string ``'null'``
+    when no suitable contour can be located.
+    """
+    from bubble_mark.processing.image_utils import find_page_contour
+
+    data = image_bytes_js.to_py()
+    pil = PILImage.open(io.BytesIO(data)).convert('RGB')
+    rgb = np.array(pil, dtype=np.uint8)
+    bgr = rgb[:, :, ::-1].copy()   # RGB → BGR (cv2 convention)
+
+    contour = find_page_contour(bgr)
+    if contour is None:
+        return 'null'
+    pts = [[int(x), int(y)] for x, y in contour.reshape(4, 2).tolist()]
+    return json.dumps({'contour': pts})
 </script>
 
 <!-- ─────────────────────────────────────────────────────────────────────────
@@ -460,6 +512,7 @@ const PYTHON_FILES = [
 let pyodide        = null;
 let gradeSheetFn   = null;   // Python callable, kept alive for the session
 let buildCsvFn     = null;
+let detectContourFn = null;  // Python callable for live page-contour detection
 let results        = [];     // accumulated GradeResult dicts
 let pendingBytes   = null;   // Uint8Array of the currently loaded image
 let cameraStream   = null;
@@ -468,27 +521,28 @@ let cameraStream   = null;
 
 const $ = (id) => document.getElementById(id);
 
-const overlay       = $('loading-overlay');
-const loadingMsg    = $('loading-msg');
-const loadingErr    = $('loading-err');
-const btnUpload     = $('btn-upload');
-const fileInput     = $('file-input');
-const btnCamera     = $('btn-camera');
-const btnGrade      = $('btn-grade');
-const btnCapture    = $('btn-capture');
-const btnStopCam    = $('btn-stop-camera');
-const cameraSection = $('camera-section');
-const cameraVideo   = $('camera-video');
-const previewArea   = $('preview-area');
-const previewCanvas = $('preview-canvas');
-const previewHint   = $('preview-hint');
-const gradeStatus   = $('grade-status');
-const resultCount   = $('result-count');
-const noResultsMsg  = $('no-results-msg');
-const resultsTable  = $('results-table');
-const resultsTbody  = $('results-tbody');
-const btnCsv        = $('btn-csv');
-const btnClear      = $('btn-clear');
+const overlay        = $('loading-overlay');
+const loadingMsg     = $('loading-msg');
+const loadingErr     = $('loading-err');
+const btnUpload      = $('btn-upload');
+const fileInput      = $('file-input');
+const btnCamera      = $('btn-camera');
+const btnGrade       = $('btn-grade');
+const btnCapture     = $('btn-capture');
+const btnStopCam     = $('btn-stop-camera');
+const cameraSection  = $('camera-section');
+const cameraVideo    = $('camera-video');
+const previewArea    = $('preview-area');
+const previewCanvas  = $('preview-canvas');
+const previewHint    = $('preview-hint');
+const liveOverlayBadge = $('live-overlay-badge');
+const gradeStatus    = $('grade-status');
+const resultCount    = $('result-count');
+const noResultsMsg   = $('no-results-msg');
+const resultsTable   = $('results-table');
+const resultsTbody   = $('results-tbody');
+const btnCsv         = $('btn-csv');
+const btnClear       = $('btn-clear');
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -507,9 +561,10 @@ async function init() {
     const setupCode = $('python-setup').textContent;
     await pyodide.runPythonAsync(setupCode);
 
-    // Keep references to the two Python callables for the session lifetime.
-    gradeSheetFn = pyodide.globals.get('grade_sheet');
-    buildCsvFn   = pyodide.globals.get('build_csv');
+    // Keep references to the Python callables for the session lifetime.
+    gradeSheetFn    = pyodide.globals.get('grade_sheet');
+    buildCsvFn      = pyodide.globals.get('build_csv');
+    detectContourFn = pyodide.globals.get('detect_contour');
 
     setLoadingMsg('Ready!');
     await new Promise((r) => setTimeout(r, 300));
@@ -628,6 +683,7 @@ btnCamera.addEventListener('click', async () => {
     });
     cameraVideo.srcObject = cameraStream;
     cameraSection.style.display = 'block';
+    startLiveOverlay();
     setStatus('Point the camera at a bubble sheet and tap "Capture Frame".', 'info');
   } catch (err) {
     const msg = err.name === 'NotAllowedError'
@@ -659,12 +715,103 @@ btnCapture.addEventListener('click', () => {
 btnStopCam.addEventListener('click', stopCamera);
 
 function stopCamera() {
+  stopLiveOverlay();
   if (cameraStream) {
     cameraStream.getTracks().forEach((t) => t.stop());
     cameraStream = null;
   }
   cameraVideo.srcObject = null;
   cameraSection.style.display = 'none';
+}
+
+// ── Live overlay ─────────────────────────────────────────────────────────────
+// Mirrors the Android CameraX screen: the preview canvas shows each camera
+// frame annotated with a green quadrilateral whenever the page detector finds
+// a bubble-sheet boundary.  Detection is throttled to ~1 analysis per second
+// so Pyodide never saturates the main thread.
+
+let liveLoopId      = null;   // requestAnimationFrame handle
+let liveLoopBusy    = false;  // guard: skip if previous analysis still running
+let liveContour     = null;   // latest detected contour [[x,y]×4] or null
+let lastOverlayMs   = 0;      // timestamp of the last Python analysis call
+const OVERLAY_INTERVAL_MS = 900;  // minimum ms between contour-detection calls
+
+function startLiveOverlay() {
+  if (liveLoopId !== null) return;
+  liveLoopBusy = false;
+  liveContour  = null;
+  liveLoopId   = requestAnimationFrame(liveOverlayTick);
+  liveOverlayBadge.style.display = 'block';
+  previewArea.classList.add('live');
+}
+
+function stopLiveOverlay() {
+  if (liveLoopId !== null) {
+    cancelAnimationFrame(liveLoopId);
+    liveLoopId = null;
+  }
+  liveLoopBusy = false;
+  liveContour  = null;
+  liveOverlayBadge.style.display = 'none';
+  previewArea.classList.remove('live');
+}
+
+function liveOverlayTick(now) {
+  if (!cameraStream) { stopLiveOverlay(); return; }
+  liveLoopId = requestAnimationFrame(liveOverlayTick);
+
+  const w = cameraVideo.videoWidth;
+  const h = cameraVideo.videoHeight;
+  if (!w || !h) return;
+
+  // Mirror the current video frame to the preview canvas every tick.
+  previewCanvas.width  = w;
+  previewCanvas.height = h;
+  const ctx = previewCanvas.getContext('2d');
+  ctx.drawImage(cameraVideo, 0, 0);
+  previewCanvas.style.display = 'block';
+  previewHint.style.display   = 'none';
+  previewArea.classList.add('has-image');
+
+  // Draw the cached contour on top of the mirrored frame.
+  if (liveContour) drawContourOverlay(ctx, liveContour);
+
+  // Throttle the expensive Python call.
+  if (liveLoopBusy || now - lastOverlayMs < OVERLAY_INTERVAL_MS) return;
+  liveLoopBusy  = true;
+  lastOverlayMs = now;
+
+  // Capture a JPEG snapshot and run page-contour detection in Python.
+  const cap = document.createElement('canvas');
+  cap.width = w; cap.height = h;
+  cap.getContext('2d').drawImage(cameraVideo, 0, 0);
+  cap.toBlob(async (blob) => {
+    if (!blob || !detectContourFn) { liveLoopBusy = false; return; }
+    try {
+      const bytes  = new Uint8Array(await blob.arrayBuffer());
+      const result = JSON.parse(detectContourFn(bytes));
+      liveContour  = result ? result.contour : null;
+    } catch (e) {
+      console.warn('Live overlay error:', e);
+    } finally {
+      liveLoopBusy = false;
+    }
+  }, 'image/jpeg', 0.7);
+}
+
+function drawContourOverlay(ctx, pts) {
+  if (!pts || pts.length !== 4) return;
+  ctx.save();
+  ctx.strokeStyle = '#00ff00';
+  ctx.lineWidth   = Math.max(3, Math.round(ctx.canvas.width / 300));
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur  = 4;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
 }
 
 // ── Grading ──────────────────────────────────────────────────────────────────
