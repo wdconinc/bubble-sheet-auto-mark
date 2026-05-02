@@ -142,7 +142,8 @@ class TestShuffle:
         shuffled = self._shuffle(original, 1)
         # Shuffled must be a permutation of the same characters
         assert sorted(shuffled) == sorted(original)
-        # For a non-zero seed with at least 2 elements it should differ (seed 1 confirmed here)
+        # For a non-zero seed with at least 2 elements it should differ
+        # (seed 1 confirmed here)
         assert shuffled != original
 
     def test_single_char_unchanged(self):
