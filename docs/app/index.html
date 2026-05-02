@@ -768,6 +768,8 @@ let pendingFiles   = [];     // [{name, bytes}] – images queued for grading
 let gradedSheets   = [];     // [{name, bytes, result, annotatedB64}] – in-memory graded results
 let activeSheetIdx = -1;     // index of the currently shown graded sheet tab
 let cameraStream   = null;
+let captureCounter = 0;   // monotonically increments with each capture; used for unique filenames
+let captureSession = 0;   // incremented when camera stops; invalidates in-flight capture callbacks
 
 // Fixed layout constant (matches id_choices_per_digit in the Python pipeline)
 const ID_CHOICES_PER_DIGIT = 10;
@@ -1092,16 +1094,20 @@ btnCapture.addEventListener('click', () => {
   cap.width  = w;
   cap.height = h;
   cap.getContext('2d').drawImage(cameraVideo, 0, 0);
+  // Snapshot both counters synchronously before any async gap.
+  const mySession = captureSession;
+  const myIdx     = ++captureCounter;
   cap.toBlob((blob) => {
+    if (mySession !== captureSession) return;  // camera was stopped; discard
     if (!blob) { setStatus('Failed to capture frame. Please try again.', 'error'); return; }
     // Keep the camera running so the user can capture additional sheets.
-    const idx  = pendingFiles.length + 1;
-    const file = new File([blob], `camera-${idx}.jpg`, { type: 'image/jpeg' });
-    file.arrayBuffer().then((buf) => {
-      const entry = { name: file.name, bytes: new Uint8Array(buf) };
+    const fileName = `camera-${myIdx}.jpg`;
+    blob.arrayBuffer().then((buf) => {
+      if (mySession !== captureSession) return;  // camera was stopped; discard
+      const entry = { name: fileName, bytes: new Uint8Array(buf) };
       pendingFiles.push(entry);
 
-      // Persist the first captured file to IDB for reload recovery.
+      // Persist the first queued file to IDB for reload recovery.
       if (pendingFiles.length === 1) {
         idbPut(IDB_KEY_PENDING, entry.bytes).catch(() => {});
       }
@@ -1118,6 +1124,7 @@ btnCapture.addEventListener('click', () => {
         previewArea.classList.add('has-image');
         URL.revokeObjectURL(imgUrl);
       };
+      img.onerror = () => URL.revokeObjectURL(imgUrl);
       img.src = imgUrl;
 
       gradedTabsSection.hidden = true;
@@ -1131,6 +1138,10 @@ btnCapture.addEventListener('click', () => {
           : `${count} frames captured — capture more or stop the camera to grade.`,
         'info'
       );
+    }).catch((err) => {
+      if (mySession !== captureSession) return;
+      console.error('Capture arrayBuffer error:', err);
+      setStatus('Failed to read captured frame. Please try again.', 'error');
     });
   }, 'image/jpeg', 0.92);
 });
@@ -1138,6 +1149,7 @@ btnCapture.addEventListener('click', () => {
 btnStopCam.addEventListener('click', stopCamera);
 
 function stopCamera() {
+  captureSession++;  // invalidate any in-flight capture callbacks
   stopLiveOverlay();
   if (cameraStream) {
     cameraStream.getTracks().forEach((t) => t.stop());
