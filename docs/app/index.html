@@ -639,11 +639,22 @@ async function fetchPythonFiles() {
 
 function setLoadingMsg(msg) { loadingMsg.textContent = msg; }
 
+const MAX_LOG_LINES = 200;
+const SCROLL_THRESHOLD = 8;   // px tolerance for "at bottom" detection
+
 function appendLog(msg) {
   const line = document.createElement('div');
   line.textContent = msg;
   loadingLog.appendChild(line);
-  loadingLog.scrollTop = loadingLog.scrollHeight;
+  // Trim oldest lines to cap DOM size.
+  while (loadingLog.childElementCount > MAX_LOG_LINES) {
+    loadingLog.removeChild(loadingLog.firstElementChild);
+  }
+  // Auto-scroll only when the user hasn't scrolled up manually.
+  const atBottom = loadingLog.scrollHeight - loadingLog.scrollTop - loadingLog.clientHeight < SCROLL_THRESHOLD;
+  if (atBottom) {
+    loadingLog.scrollTop = loadingLog.scrollHeight;
+  }
 }
 
 function enableUI() {
