@@ -683,6 +683,19 @@ const btnClearId      = $('btn-clear-id');
 // ── Boot ─────────────────────────────────────────────────────────────────────
 
 async function init() {
+  // Restore lightweight state (settings, regions, results) immediately,
+  // before Pyodide starts loading, so the UI reflects persisted values.
+  restoreSettings();
+  restoreRegions();
+  restoreResults();
+
+  // Open IndexedDB and restore persisted images (fail silently if unavailable).
+  try {
+    idb = await openIDB();
+    await restoreRefImage();
+    await restorePendingImage();
+  } catch (_) {}
+
   try {
     setLoadingMsg('Loading Python runtime (Pyodide)…');
     pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX, messageCallback: appendLog });
@@ -760,6 +773,7 @@ function appendLog(msg) {
 function enableUI() {
   btnUpload.disabled = false;
   btnCamera.disabled = false;
+  if (pendingBytes !== null) btnGrade.disabled = false;
 }
 
 function setStatus(msg, type) {
@@ -790,6 +804,7 @@ function getSettings() {
 function loadImageBlob(blob) {
   blob.arrayBuffer().then((buf) => {
     pendingBytes = new Uint8Array(buf);
+    idbPut(IDB_KEY_PENDING, pendingBytes).catch(() => {});
 
     // Draw preview on canvas.
     const url = URL.createObjectURL(blob);
@@ -897,6 +912,187 @@ let liveCanvasW     = 0;      // cached overlay canvas dimensions
 let liveCanvasH     = 0;
 let liveCtx         = null;   // cached 2D rendering context for #camera-overlay
 const OVERLAY_INTERVAL_MS = 900;  // minimum ms between contour-detection calls
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+// Settings, regions, and results are stored in localStorage.
+// Binary image data is stored in IndexedDB (no meaningful size limits).
+
+const LS_SETTINGS      = 'bsam_settings';
+const LS_ANSWER_REGION = 'bsam_answer_region';
+const LS_ID_REGION     = 'bsam_id_region';
+const LS_RESULTS       = 'bsam_results';
+
+const IDB_DB_NAME    = 'bubble-sheet-auto-mark';
+const IDB_STORE_NAME = 'blobs';
+const IDB_KEY_REF    = 'ref_image';
+const IDB_KEY_PENDING = 'pending_image';
+
+let idb = null;  // IDBDatabase instance, opened in init()
+
+function openIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      if (!e.target.result.objectStoreNames.contains(IDB_STORE_NAME)) {
+        e.target.result.createObjectStore(IDB_STORE_NAME);
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror   = (e) => reject(e.target.error);
+  });
+}
+
+function idbPut(key, value) {
+  if (!idb) return Promise.resolve();
+  try {
+    return new Promise((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE_NAME, 'readwrite');
+      tx.objectStore(IDB_STORE_NAME).put(value, key);
+      tx.oncomplete = resolve;
+      tx.onerror    = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}
+
+function idbGet(key) {
+  if (!idb) return Promise.resolve();
+  try {
+    return new Promise((resolve, reject) => {
+      const tx  = idb.transaction(IDB_STORE_NAME, 'readonly');
+      const req = tx.objectStore(IDB_STORE_NAME).get(key);
+      req.onsuccess = (e) => resolve(e.target.result);
+      req.onerror   = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}
+
+function idbDelete(key) {
+  if (!idb) return Promise.resolve();
+  try {
+    return new Promise((resolve, reject) => {
+      const tx = idb.transaction(IDB_STORE_NAME, 'readwrite');
+      tx.objectStore(IDB_STORE_NAME).delete(key);
+      tx.oncomplete = resolve;
+      tx.onerror    = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    return Promise.reject(e);
+  }
+}
+
+function saveSettings() {
+  try {
+    localStorage.setItem(LS_SETTINGS, JSON.stringify({
+      numQuestions:  $('num-questions').value,
+      numChoices:    $('num-choices').value,
+      numIdDigits:   $('num-id-digits').value,
+      fillThreshold: $('fill-threshold').value,
+      answerKey:     $('answer-key').value,
+    }));
+  } catch (_) {}
+}
+
+function saveRegions() {
+  try {
+    localStorage.setItem(LS_ANSWER_REGION, JSON.stringify(answerRegion));
+    localStorage.setItem(LS_ID_REGION,     JSON.stringify(idRegion));
+  } catch (_) {}
+}
+
+function saveResults() {
+  try {
+    localStorage.setItem(LS_RESULTS, JSON.stringify(results));
+  } catch (_) {}
+}
+
+function restoreSettings() {
+  try {
+    const raw = localStorage.getItem(LS_SETTINGS);
+    if (!raw) return;
+    const s = JSON.parse(raw);
+    if (s.numQuestions  != null) $('num-questions').value  = s.numQuestions;
+    if (s.numChoices    != null) $('num-choices').value    = s.numChoices;
+    if (s.numIdDigits   != null) $('num-id-digits').value  = s.numIdDigits;
+    if (s.fillThreshold != null) $('fill-threshold').value = s.fillThreshold;
+    if (s.answerKey     != null) $('answer-key').value     = s.answerKey;
+  } catch (_) {}
+}
+
+function restoreRegions() {
+  try {
+    const ar = localStorage.getItem(LS_ANSWER_REGION);
+    const ir = localStorage.getItem(LS_ID_REGION);
+    if (ar) answerRegion = JSON.parse(ar);
+    if (ir) idRegion     = JSON.parse(ir);
+  } catch (_) {}
+}
+
+function restoreResults() {
+  try {
+    const raw = localStorage.getItem(LS_RESULTS);
+    if (!raw) return;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr.length === 0) return;
+    results = arr;
+    results.forEach((r, i) => appendResultRow(r, i + 1));
+    refreshResultsPanel();
+  } catch (_) {}
+}
+
+async function restoreRefImage() {
+  try {
+    const bytes = await idbGet(IDB_KEY_REF);
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) return;
+    const blob = new Blob([bytes]);
+    const url  = URL.createObjectURL(blob);
+    await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        const maxW  = refCanvas.parentElement.clientWidth || 600;
+        const scale = Math.min(1, maxW / img.naturalWidth);
+        refCanvas.width  = Math.round(img.naturalWidth  * scale);
+        refCanvas.height = Math.round(img.naturalHeight * scale);
+        refImageEl = img;
+        redrawRefCanvas();
+        refCanvasSection.style.display = 'block';
+        btnRefClear.style.display = 'inline-flex';
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      img.src = url;
+    });
+  } catch (_) {}
+}
+
+async function restorePendingImage() {
+  try {
+    const bytes = await idbGet(IDB_KEY_PENDING);
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) return;
+    pendingBytes = bytes;
+    const blob = new Blob([bytes]);
+    const url  = URL.createObjectURL(blob);
+    await new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        previewCanvas.width  = img.naturalWidth;
+        previewCanvas.height = img.naturalHeight;
+        previewCanvas.getContext('2d').drawImage(img, 0, 0);
+        previewCanvas.style.display = 'block';
+        previewHint.style.display   = 'none';
+        previewArea.classList.add('has-image');
+        URL.revokeObjectURL(url);
+        resolve();
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); resolve(); };
+      img.src = url;
+    });
+  } catch (_) {}
+}
 
 function startLiveOverlay() {
   if (liveLoopId !== null) return;
@@ -1023,6 +1219,7 @@ btnGrade.addEventListener('click', async () => {
       );
     } else {
       results.push(result);
+      saveResults();
       appendResultRow(result, results.length);
       refreshResultsPanel();
 
@@ -1080,6 +1277,7 @@ btnClear.addEventListener('click', () => {
   resultsTbody.innerHTML = '';
   refreshResultsPanel();
   setStatus('', '');
+  saveResults();
 });
 
 btnCsv.addEventListener('click', async () => {
@@ -1107,6 +1305,9 @@ refFileInput.addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   refFileInput.value = '';
+
+  // Persist the image bytes so the reference sheet survives page refreshes.
+  file.arrayBuffer().then((buf) => idbPut(IDB_KEY_REF, new Uint8Array(buf))).catch(() => {});
 
   const url = URL.createObjectURL(file);
   const img = new Image();
@@ -1136,13 +1337,15 @@ btnRefClear.addEventListener('click', () => {
   refCanvasSection.style.display = 'none';
   btnRefClear.style.display = 'none';
   setDrawMode(null);
+  idbDelete(IDB_KEY_REF).catch(() => {});
+  saveRegions();
 });
 
 btnDrawAnswer.addEventListener('click', () => setDrawMode(drawMode === 'answer' ? null : 'answer'));
 btnDrawId.addEventListener('click',     () => setDrawMode(drawMode === 'id'     ? null : 'id'));
 
-btnClearAnswer.addEventListener('click', () => { answerRegion = null; redrawRefCanvas(); });
-btnClearId.addEventListener('click',     () => { idRegion = null;     redrawRefCanvas(); });
+btnClearAnswer.addEventListener('click', () => { answerRegion = null; redrawRefCanvas(); saveRegions(); });
+btnClearId.addEventListener('click',     () => { idRegion = null;     redrawRefCanvas(); saveRegions(); });
 
 function setDrawMode(mode) {
   drawMode = mode;
@@ -1211,6 +1414,7 @@ function onPointerUp(e) {
   drawStart   = null;
   drawCurrent = null;
   redrawRefCanvas();
+  saveRegions();
   e.preventDefault();
 }
 
@@ -1334,6 +1538,11 @@ $('settings-toggle').addEventListener('click', () => {
 });
 
 // ── Start ────────────────────────────────────────────────────────────────────
+
+// Persist settings whenever any field changes.
+['num-questions', 'num-choices', 'num-id-digits', 'fill-threshold', 'answer-key'].forEach((id) => {
+  $(id).addEventListener('input', saveSettings);
+});
 
 init();
 </script>
