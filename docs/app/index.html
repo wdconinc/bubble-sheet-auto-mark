@@ -1152,7 +1152,7 @@ let autoCaptureCooldownUntil = 0;     // performance.now() value until which aut
 const OVERLAY_INTERVAL_MS = 900;  // minimum ms between contour-detection calls
 
 // Auto-capture: trigger when a sheet is detected and the frame is stable.
-const AUTO_CAPTURE_MAD_THRESHOLD   = 10;   // mean abs pixel diff per channel (0–255) for "stable"
+const AUTO_CAPTURE_MAD_THRESHOLD   = 10;   // mean abs pixel diff per channel (0–255); ~4% change triggers reset
 const AUTO_CAPTURE_STABLE_REQUIRED = 2;    // consecutive stable+contour detections needed to fire
 const AUTO_CAPTURE_COOLDOWN_MS     = 2500; // ms to wait between consecutive auto-captures
 const AUTO_CAPTURE_THUMB_W         = 160;  // thumbnail width  used for motion comparison
@@ -1397,6 +1397,7 @@ function _computeMotionMad(srcCanvas) {
 }
 
 function liveOverlayTick(now) {
+  if (!cameraStream) { stopLiveOverlay(); return; }
   liveLoopId = requestAnimationFrame(liveOverlayTick);
 
   const w = cameraVideo.videoWidth;
