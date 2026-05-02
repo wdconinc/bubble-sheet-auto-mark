@@ -41,7 +41,9 @@ except ImportError:
 _PARALLEL_LINE_EPSILON: float = 1e-10
 
 # Small epsilon added to the FFT cross-power spectrum to avoid division by zero.
-_FFT_EPSILON: float = 1e-10
+# Defined as float32 so that abs(cross_power) + _FFT_EPSILON stays in float32
+# arithmetic without upcasting to float64.
+_FFT_EPSILON: np.float32 = np.float32(1e-10)
 
 
 # ---------------------------------------------------------------------------
@@ -328,8 +330,9 @@ def _fft_translation(
     cross_power = fa * np.conj(fb)
     del fa, fb  # release frequency-domain buffers immediately
 
-    # Normalise in-place; keep arithmetic in float32 to avoid upcasting.
-    denom = np.abs(cross_power) + np.float32(_FFT_EPSILON)
+    # Normalise in-place; _FFT_EPSILON is already float32 so arithmetic
+    # stays in float32 without upcasting.
+    denom = np.abs(cross_power) + _FFT_EPSILON
     cross_power /= denom
     del denom
 

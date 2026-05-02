@@ -681,6 +681,10 @@ from bubble_mark.processing.grader import BubbleSheetGrader
 from bubble_mark.models.answer_key import AnswerKey
 from bubble_mark.export.csv_exporter import CSVExporter
 
+# Standard normalised sheet dimensions shared with BubbleSheetDetector.
+_NORM_WIDTH  = 850
+_NORM_HEIGHT = 1100
+
 
 def grade_sheet(image_bytes_js, num_questions, num_choices,
                 num_id_digits, fill_threshold, answer_key_str,
@@ -738,7 +742,7 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
             ref_rgb  = np.array(ref_pil, dtype=np.uint8)
             ref_bgr  = ref_rgb[:, :, ::-1].copy()
             del ref_data, ref_pil, ref_rgb  # free intermediates immediately
-            ref_bgr  = _resize_image(ref_bgr, width=850, height=1100)
+            ref_bgr  = _resize_image(ref_bgr, width=_NORM_WIDTH, height=_NORM_HEIGHT)
         except Exception as exc:
             print(f'[grade_sheet] reference image decode failed: {exc}', file=sys.stderr)
             ref_bgr = None
@@ -880,7 +884,7 @@ def process_reference_image(image_bytes_js, edge_lines_json='null'):
         # full-resolution source image (~30–50 MB as base64 for a 12 MP photo).
         # All downstream uses (enhance_reference_channel, detect_reference_grid,
         # and the on-canvas display) work correctly at this resolution.
-        corrected = resize_image(corrected, width=850, height=1100)
+        corrected = resize_image(corrected, width=_NORM_WIDTH, height=_NORM_HEIGHT)
 
         variances    = [float(np.var(corrected[:, :, i].astype(np.float32))) for i in range(3)]
         best_channel = int(np.argmax(variances))
