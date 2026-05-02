@@ -33,9 +33,9 @@ import numpy as np
 FrameCallback = Callable[[np.ndarray], None]
 
 # Module-level references so stop_camera() can unbind / release resources.
-_provider = None       # Android: ProcessCameraProvider
-_ios_session = None    # iOS: AVCaptureSession
-_ios_delegate = None   # iOS: _FrameDelegate (kept to prevent GC)
+_provider = None  # Android: ProcessCameraProvider
+_ios_session = None  # iOS: AVCaptureSession
+_ios_delegate = None  # iOS: _FrameDelegate (kept to prevent GC)
 
 
 def _is_android() -> bool:
@@ -235,7 +235,8 @@ def _start_ios(callback: FrameCallback) -> bool:
     CoreVideo.CVPixelBufferLockBaseAddress.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
     CoreVideo.CVPixelBufferUnlockBaseAddress.restype = ctypes.c_int32
     CoreVideo.CVPixelBufferUnlockBaseAddress.argtypes = [
-        ctypes.c_void_p, ctypes.c_uint32
+        ctypes.c_void_p,
+        ctypes.c_uint32,
     ]
     CoreVideo.CVPixelBufferGetBaseAddress.restype = ctypes.c_void_p
     CoreVideo.CVPixelBufferGetBaseAddress.argtypes = [ctypes.c_void_p]
@@ -312,14 +313,10 @@ def _start_ios(callback: FrameCallback) -> bool:
             self, output, sampleBuffer, connection
         ) -> None:
             try:
-                pb = CoreMedia.CMSampleBufferGetImageBuffer(
-                    sampleBuffer.ptr.value
-                )
+                pb = CoreMedia.CMSampleBufferGetImageBuffer(sampleBuffer.ptr.value)
                 if not pb:
                     return
-                CoreVideo.CVPixelBufferLockBaseAddress(
-                    pb, _kCVPixelBufferLock_ReadOnly
-                )
+                CoreVideo.CVPixelBufferLockBaseAddress(pb, _kCVPixelBufferLock_ReadOnly)
                 try:
                     base = CoreVideo.CVPixelBufferGetBaseAddress(pb)
                     w = CoreVideo.CVPixelBufferGetWidth(pb)
@@ -327,9 +324,7 @@ def _start_ios(callback: FrameCallback) -> bool:
                     bpr = CoreVideo.CVPixelBufferGetBytesPerRow(pb)
                     raw = (ctypes.c_uint8 * (bpr * h)).from_address(base)
                     # BGRA pixel layout → strip alpha, crop row padding → RGB
-                    bgra = np.frombuffer(raw, dtype=np.uint8).reshape(
-                        (h, bpr // 4, 4)
-                    )
+                    bgra = np.frombuffer(raw, dtype=np.uint8).reshape((h, bpr // 4, 4))
                     rgb = bgra[:, :w, 2::-1].copy()
                     if self._cb is not None:
                         self._cb(rgb)
