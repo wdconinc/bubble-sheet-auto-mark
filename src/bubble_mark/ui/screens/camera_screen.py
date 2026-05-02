@@ -1,6 +1,6 @@
 """Camera / image import screen.
 
-On Android the screen opens a live CameraX viewfinder with an OpenCV overlay
+On Android and iOS the screen opens a live camera viewfinder with an overlay
 that highlights the detected bubble-sheet page contour in real time.  A
 "Capture" button freezes the current frame and feeds it into the grading
 pipeline.
@@ -29,6 +29,10 @@ logger = logging.getLogger(__name__)
 
 def _is_android() -> bool:
     return sys.platform == "android" or "ANDROID_DATA" in __import__("os").environ
+
+
+def _is_ios() -> bool:
+    return sys.platform == "ios"
 
 
 # When cv2 is absent, overlay detection runs every Nth frame to reduce CPU load.
@@ -150,11 +154,12 @@ def build_camera_screen(app: BubbleMarkApp) -> toga.Box:
     # ------------------------------------------------------------------ #
 
     def open_camera(widget: toga.Widget) -> None:
-        if _is_android():
+        if _is_android() or _is_ios():
             from bubble_mark.ui.camerax_bridge import start_camera
 
+            platform = "iOS AVFoundation" if _is_ios() else "Android CameraX"
             status_label.text = "Starting camera…"
-            logger.info("Opening camera (Android CameraX).")
+            logger.info("Opening camera (%s).", platform)
             started = start_camera(_on_frame)
             if not started:
                 status_label.text = (

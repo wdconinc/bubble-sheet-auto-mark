@@ -1,0 +1,82 @@
+name: Build iOS App
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Set version from git tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          # Patch [tool.briefcase] version (the only static version= line left;
+          # [project] version is derived dynamically by setuptools-scm).
+          sed -i '' "s/^version = \".*\"$/version = \"${TAG_VERSION}\"/" pyproject.toml
+
+      - name: Install Briefcase
+        run: pip install briefcase
+
+      - name: Get Briefcase version
+        run: echo "BRIEFCASE_VERSION=$(pip show briefcase | grep '^Version:' | cut -d' ' -f2)" >> $GITHUB_ENV
+
+      - name: Cache Briefcase tools and SDKs
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/briefcase
+          key: ${{ runner.os }}-briefcase-${{ env.BRIEFCASE_VERSION }}-${{ hashFiles('pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-briefcase-${{ env.BRIEFCASE_VERSION }}-
+            ${{ runner.os }}-briefcase-
+
+      - name: Create iOS project
+        run: briefcase create iOS
+
+      - name: Build iOS app
+        run: briefcase build iOS
+
+      - name: Upload iOS app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bubble-sheet-auto-mark-ios
+          path: build/bubble-mark/ios/xcode/build/**/*.app
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download iOS app artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: bubble-sheet-auto-mark-ios
+          path: ios-app
+
+      - name: Upload iOS app to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ios-app/**/*.app
