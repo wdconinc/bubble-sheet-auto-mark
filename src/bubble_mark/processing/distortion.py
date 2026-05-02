@@ -200,7 +200,7 @@ def _eval_polyline_vec(
     Parameters
     ----------
     pts:
-        List of ``[x, y]`` control points (at least 2).
+        List of ``[x, y]`` control points (at least 2 required).
     t_arr:
         1-D array of parameter values in ``[0, 1]``.
 
@@ -211,8 +211,6 @@ def _eval_polyline_vec(
     """
     pts_arr = np.array(pts, dtype=np.float64)  # (N, 2)
     n = len(pts_arr)
-    if n == 1:
-        return np.tile(pts_arr[0], (len(t_arr), 1))
 
     idx_float = np.asarray(t_arr, dtype=np.float64) * (n - 1)
     lo = np.clip(np.floor(idx_float).astype(np.int32), 0, n - 2)
