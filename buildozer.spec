@@ -9,7 +9,7 @@ source.include_patterns = main.py,src/**
 
 version = 0.1.0
 
-requirements = python3==3.12,kivy==2.3.1,opencv,numpy,pillow
+requirements = python3==3.12,kivy@https://github.com/kivy/kivy/archive/dc32205ac51ba5452eb904b2fd78cdafffd64ccd.zip,opencv,numpy,pillow
 
 orientation = portrait,landscape
 

@@ -1,4 +1,4 @@
-kivy==2.3.1
+kivy @ git+https://github.com/kivy/kivy.git@dc32205ac51ba5452eb904b2fd78cdafffd64ccd
 opencv-python-headless>=4.8
 numpy>=1.26
 Pillow>=10.0
