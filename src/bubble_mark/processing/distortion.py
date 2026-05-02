@@ -41,9 +41,9 @@ except ImportError:
 _PARALLEL_LINE_EPSILON: float = 1e-10
 
 # Small epsilon added to the FFT cross-power spectrum to avoid division by zero.
-# Defined as float32 so that abs(cross_power) + _FFT_EPSILON stays in float32
+# Stored as float32 so that abs(cross_power) + _FFT_EPSILON stays in float32
 # arithmetic without upcasting to float64.
-_FFT_EPSILON: np.float32 = np.float32(1e-10)
+_FFT_EPSILON: float = np.float32(1e-10)
 
 
 # ---------------------------------------------------------------------------

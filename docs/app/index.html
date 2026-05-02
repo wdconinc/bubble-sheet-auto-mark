@@ -711,12 +711,13 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
     Returns a JSON string encoding the result dict, or the string ``'null'``
     when no sheet could be detected.
     """
-    from bubble_mark.processing.image_utils import resize_image as _resize_image
+    from bubble_mark.processing.image_utils import resize_image
 
     data = image_bytes_js.to_py()          # JsProxy[Uint8Array] → bytearray
     pil = PILImage.open(io.BytesIO(data)).convert('RGB')
     rgb = np.array(pil, dtype=np.uint8)
     bgr = rgb[:, :, ::-1].copy()           # RGB → BGR (cv2 convention)
+    # All four variables are defined at this point, so the del is safe.
     del data, pil, rgb  # free decoded originals; bgr is the only copy we need
 
     layout = {
@@ -742,7 +743,7 @@ def grade_sheet(image_bytes_js, num_questions, num_choices,
             ref_rgb  = np.array(ref_pil, dtype=np.uint8)
             ref_bgr  = ref_rgb[:, :, ::-1].copy()
             del ref_data, ref_pil, ref_rgb  # free intermediates immediately
-            ref_bgr  = _resize_image(ref_bgr, width=_NORM_WIDTH, height=_NORM_HEIGHT)
+            ref_bgr  = resize_image(ref_bgr, width=_NORM_WIDTH, height=_NORM_HEIGHT)
         except Exception as exc:
             print(f'[grade_sheet] reference image decode failed: {exc}', file=sys.stderr)
             ref_bgr = None
