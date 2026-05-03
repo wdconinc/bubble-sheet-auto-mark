@@ -1848,32 +1848,6 @@ function restoreEdgePolylines() {
   } catch (_) {}
 }
 
-function restoreEdgePolylines() {
-  try {
-    const raw = localStorage.getItem(LS_EDGE_POLYLINES);
-    if (!raw) return;
-    const ep = JSON.parse(raw);
-    if (ep && typeof ep === 'object') {
-      refEdgePolylines = {
-        top:    Array.isArray(ep.top)    ? ep.top    : null,
-        bottom: Array.isArray(ep.bottom) ? ep.bottom : null,
-        left:   Array.isArray(ep.left)   ? ep.left   : null,
-        right:  Array.isArray(ep.right)  ? ep.right  : null,
-      };
-      // If any polylines were saved, restore polyline mode
-      const hasAny = Object.values(refEdgePolylines).some(v => Array.isArray(v) && v.length >= 2);
-      if (hasAny) {
-        polylineMode = true;
-        $('chk-polyline-mode').checked = true;
-        $('btn-poly-clear').style.display = '';
-      }
-      updateApplyCorrectionBtn();
-      updateEdgeStatus();
-      updateEdgeButtonLabels();
-    }
-  } catch (_) {}
-}
-
 function saveResults() {
   try {
     localStorage.setItem(LS_RESULTS, JSON.stringify(results));
