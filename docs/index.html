@@ -213,7 +213,7 @@
       margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em;
     }
     #ref-canvas-wrap {
-      position: relative; display: inline-block;
+      position: relative; display: block;
       max-width: 100%; margin-top: 10px;
     }
     #ref-canvas {
@@ -2976,9 +2976,17 @@ function redrawRefCanvas() {
 
 // ── Reference sheet workflow helpers ─────────────────────────────────────────
 
-/** Fit the reference canvas to imgEl, preserving the container width. */
+/**
+ * Size the reference canvas to imgEl at display resolution.
+ * The canvas is capped to the container width × devicePixelRatio so that
+ * high-MP uploads don't allocate oversized pixel buffers; CSS max-width:100%
+ * handles the visible display size. Coordinate mapping functions use
+ * getBoundingClientRect() and the refRawImageEl natural dimensions, so they
+ * remain accurate regardless of the canvas resolution chosen here.
+ */
 function setRefCanvasFromImage(imgEl) {
-  const maxW  = refCanvas.parentElement.clientWidth || 600;
+  const maxW  = (refCanvas.parentElement?.clientWidth || imgEl.naturalWidth)
+                * (window.devicePixelRatio || 1);
   const scale = Math.min(1, maxW / imgEl.naturalWidth);
   refCanvas.width  = Math.round(imgEl.naturalWidth  * scale);
   refCanvas.height = Math.round(imgEl.naturalHeight * scale);
