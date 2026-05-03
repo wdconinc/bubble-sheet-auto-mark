@@ -2738,51 +2738,62 @@ function onPointerDown(e) {
   if (!refImageEl) return;
   const pos = getCanvasPos(e);
 
-  if (polylineRemoveMode) {
-    // Remove mode: click a point to delete it.
+  // Polyline interactions (add/remove/drag points) are only valid at step 0
+  // where the canvas shows the raw image that the polyline coordinates belong to.
+  if (refStep === 0) {
+    if (polylineRemoveMode) {
+      // Remove mode: click a point to delete it.
+      const hit = findHoveredPoint(pos.x, pos.y);
+      if (hit) {
+        const pts = refEdgePolylines[hit.edge];
+        pts.splice(hit.idx, 1);
+        if (pts.length === 0) refEdgePolylines[hit.edge] = null;
+        polylineHoverEdge = null;
+        polylineHoverIdx  = -1;
+        updateApplyCorrectionBtn();
+        updateEdgeStatus();
+        updateEdgeButtonLabels();
+        saveEdgePolylines();
+        redrawRefCanvas();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    // Check if starting a drag on an existing point.
     const hit = findHoveredPoint(pos.x, pos.y);
     if (hit) {
-      const pts = refEdgePolylines[hit.edge];
-      pts.splice(hit.idx, 1);
-      if (pts.length === 0) refEdgePolylines[hit.edge] = null;
-      polylineHoverEdge = null;
-      polylineHoverIdx  = -1;
+      polylineDragEdge = hit.edge;
+      polylineDragIdx  = hit.idx;
+      refCanvas.style.cursor = 'grabbing';
+      // Capture pointer so drag continues even if cursor leaves the canvas.
+      if (e.pointerId !== undefined) {
+        refCanvas.setPointerCapture(e.pointerId);
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (polylineDrawEdge) {
+      // Add a new point to the active edge.
+      if (!refRawImageEl) return;
+      const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
+      const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
+      const raw = { ix: pos.x * scaleX, iy: pos.y * scaleY };
+      const snapped = snapToNeighborEndpoint(raw.ix, raw.iy, polylineDrawEdge);
+      if (!refEdgePolylines[polylineDrawEdge]) refEdgePolylines[polylineDrawEdge] = [];
+      refEdgePolylines[polylineDrawEdge].push([snapped.ix, snapped.iy]);
       updateApplyCorrectionBtn();
       updateEdgeStatus();
       updateEdgeButtonLabels();
       saveEdgePolylines();
       redrawRefCanvas();
       e.preventDefault();
+      return;
     }
-    return;
   }
 
-  // Check if starting a drag on an existing point.
-  const hit = findHoveredPoint(pos.x, pos.y);
-  if (hit) {
-    polylineDragEdge = hit.edge;
-    polylineDragIdx  = hit.idx;
-    refCanvas.style.cursor = 'grabbing';
-    e.preventDefault();
-    return;
-  }
-
-  if (polylineDrawEdge) {
-    // Add a new point to the active edge.
-    if (!refRawImageEl) return;
-    const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
-    const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
-    const raw = { ix: pos.x * scaleX, iy: pos.y * scaleY };
-    const snapped = snapToNeighborEndpoint(raw.ix, raw.iy, polylineDrawEdge);
-    if (!refEdgePolylines[polylineDrawEdge]) refEdgePolylines[polylineDrawEdge] = [];
-    refEdgePolylines[polylineDrawEdge].push([snapped.ix, snapped.iy]);
-    updateApplyCorrectionBtn();
-    updateEdgeStatus();
-    updateEdgeButtonLabels();
-    saveEdgePolylines();
-    redrawRefCanvas();
-    e.preventDefault();
-  } else if (drawMode) {
+  if (drawMode) {
     isDrawing   = true;
     drawStart   = getCanvasPos(e);
     drawCurrent = drawStart;
@@ -2813,6 +2824,9 @@ function onPointerMove(e) {
     e.preventDefault();
     return;
   }
+
+  // Hover state and cursor updates only make sense at step 0.
+  if (refStep !== 0) return;
 
   // Update hover state and cursor.
   const hit = findHoveredPoint(pos.x, pos.y);
@@ -2885,12 +2899,30 @@ function onPointerUp(e) {
   }
 }
 
-refCanvas.addEventListener('mousedown',  onPointerDown);
-refCanvas.addEventListener('mousemove',  onPointerMove);
-refCanvas.addEventListener('mouseup',    onPointerUp);
-refCanvas.addEventListener('touchstart', onPointerDown, { passive: false });
-refCanvas.addEventListener('touchmove',  onPointerMove, { passive: false });
-refCanvas.addEventListener('touchend',   onPointerUp,   { passive: false });
+refCanvas.addEventListener('pointerdown', onPointerDown);
+refCanvas.addEventListener('pointermove', onPointerMove);
+refCanvas.addEventListener('pointerup',   onPointerUp);
+// Safety-net: end any in-progress drag/draw if the pointer is released outside
+// the canvas (e.g., user drags off-screen) or if the pointer is cancelled.
+function onPointerCancel() {
+  if (polylineDragEdge !== null) {
+    polylineDragEdge = null;
+    polylineDragIdx  = -1;
+    saveEdgePolylines();
+    updateApplyCorrectionBtn();
+    updateEdgeStatus();
+    redrawRefCanvas();
+    refCanvas.style.cursor = polylineDrawEdge ? 'crosshair' : '';
+  }
+  if (isDrawing) {
+    isDrawing   = false;
+    drawStart   = null;
+    drawCurrent = null;
+    redrawRefCanvas();
+  }
+}
+window.addEventListener('pointerup',     onPointerCancel);
+window.addEventListener('pointercancel', onPointerCancel);
 
 // Draw grid lines inside a committed region to show where bubbles will be sought.
 // The geometry mirrors BubbleSheetDetector._build_bubble_grid: 5 % margins on
