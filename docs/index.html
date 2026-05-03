@@ -213,7 +213,7 @@
       margin-bottom: 6px; text-transform: uppercase; letter-spacing: .04em;
     }
     #ref-canvas-wrap {
-      position: relative; display: inline-block;
+      position: relative; display: block;
       max-width: 100%; margin-top: 10px;
     }
     #ref-canvas {
@@ -2978,10 +2978,8 @@ function redrawRefCanvas() {
 
 /** Fit the reference canvas to imgEl, preserving the container width. */
 function setRefCanvasFromImage(imgEl) {
-  const maxW  = refCanvas.parentElement.clientWidth || 600;
-  const scale = Math.min(1, maxW / imgEl.naturalWidth);
-  refCanvas.width  = Math.round(imgEl.naturalWidth  * scale);
-  refCanvas.height = Math.round(imgEl.naturalHeight * scale);
+  refCanvas.width  = imgEl.naturalWidth;
+  refCanvas.height = imgEl.naturalHeight;
   refImageEl = imgEl;
 }
 
