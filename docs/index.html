@@ -333,33 +333,11 @@
     .ref-color-info table { border-collapse: collapse; margin-top: 4px; width: 100%; }
     .ref-color-info td { padding: 1px 10px 1px 0; font-size: .8rem; }
     .ref-color-info td:first-child { font-weight: 500; min-width: 54px; }
-    /* Edge-line drawing cursor */
-    #ref-canvas.mode-edge-top,
-    #ref-canvas.mode-edge-bottom,
-    #ref-canvas.mode-edge-left,
-    #ref-canvas.mode-edge-right { cursor: crosshair; border-color: #7c3aed; }
+    /* Edge-polyline drawing — border color only; cursor is managed by JS */
     #ref-canvas.mode-poly-top,
     #ref-canvas.mode-poly-bottom,
     #ref-canvas.mode-poly-left,
-    #ref-canvas.mode-poly-right  { cursor: cell;       border-color: #0ea5e9; }
-
-    /* Edge-line coordinate inputs */
-    #edge-coords-panel { margin-top: 8px; }
-    .edge-coord-row {
-      display: none; align-items: center; gap: 6px;
-      font-size: .78rem; padding: 3px 0;
-    }
-    .edge-coord-row.has-line { display: flex; }
-    .edge-coord-label {
-      width: 4em; font-weight: 600; color: #7c3aed; flex-shrink: 0;
-    }
-    .edge-coord-input {
-      width: 5em; padding: 2px 4px; border: 1px solid var(--border);
-      border-radius: 4px; font-size: .78rem; text-align: right;
-      background: var(--bg); color: var(--text);
-    }
-    .edge-coord-input:focus { outline: none; border-color: #7c3aed; }
-    .edge-coord-sep { color: var(--muted); font-size: .75rem; }
+    #ref-canvas.mode-poly-right  { border-color: #0ea5e9; }
 
     /* ── Graded-sheets tab bar ── */
     #graded-tabs-section { margin-top: 12px; }
@@ -553,23 +531,11 @@
               <button class="btn-ghost" id="btn-edge-bottom" type="button" data-edge="bottom">▼ Bottom Edge</button>
               <button class="btn-ghost" id="btn-edge-left"   type="button" data-edge="left">◄ Left Edge</button>
               <button class="btn-ghost" id="btn-edge-right"  type="button" data-edge="right">► Right Edge</button>
-              <button class="btn-ghost" id="btn-edge-clear"  type="button">✕ Clear Lines</button>
+              <button class="btn-ghost" id="btn-remove-point" type="button"
+                      title="Toggle remove-point mode: click any placed point to delete it">✕ Remove Point</button>
+              <button class="btn-ghost" id="btn-edge-clear"  type="button">✕ Clear Points</button>
             </div>
-            <div style="margin-top:6px;display:flex;align-items:center;gap:8px;font-size:.85rem">
-              <label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer"
-                     title="Enable polyline mode to draw curved edges by clicking multiple points">
-                <input type="checkbox" id="chk-polyline-mode" style="width:14px;height:14px;cursor:pointer;accent-color:#0ea5e9">
-                Curved edges (polyline mode)
-              </label>
-              <button class="btn-ghost" id="btn-poly-clear" type="button" style="display:none">✕ Clear Polylines</button>
-            </div>
-            <div id="ref-edge-status" class="ref-step-hint">Draw all 4 edge lines on the image, or use Auto-detect.</div>
-            <div id="edge-coords-panel">
-              <div id="edge-coord-row-top"    class="edge-coord-row"><span class="edge-coord-label">Top</span>    <input type="number" class="edge-coord-input" id="ec-top-x1"    step="1" title="x1" aria-label="Top x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y1"    step="1" title="y1" aria-label="Top y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-top-x2"    step="1" title="x2" aria-label="Top x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-top-y2"    step="1" title="y2" aria-label="Top y2"></div>
-              <div id="edge-coord-row-bottom" class="edge-coord-row"><span class="edge-coord-label">Bottom</span><input type="number" class="edge-coord-input" id="ec-bottom-x1" step="1" title="x1" aria-label="Bottom x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y1" step="1" title="y1" aria-label="Bottom y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-bottom-x2" step="1" title="x2" aria-label="Bottom x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-bottom-y2" step="1" title="y2" aria-label="Bottom y2"></div>
-              <div id="edge-coord-row-left"   class="edge-coord-row"><span class="edge-coord-label">Left</span>  <input type="number" class="edge-coord-input" id="ec-left-x1"   step="1" title="x1" aria-label="Left x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y1"   step="1" title="y1" aria-label="Left y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-left-x2"   step="1" title="x2" aria-label="Left x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-left-y2"   step="1" title="y2" aria-label="Left y2"></div>
-              <div id="edge-coord-row-right"  class="edge-coord-row"><span class="edge-coord-label">Right</span> <input type="number" class="edge-coord-input" id="ec-right-x1"  step="1" title="x1" aria-label="Right x1"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y1"  step="1" title="y1" aria-label="Right y1"><span class="edge-coord-sep">→</span><input type="number" class="edge-coord-input" id="ec-right-x2"  step="1" title="x2" aria-label="Right x2"><span class="edge-coord-sep">,</span><input type="number" class="edge-coord-input" id="ec-right-y2"  step="1" title="y2" aria-label="Right y2"></div>
-            </div>
+            <div id="ref-edge-status" class="ref-step-hint">Click an edge button, then click points on the image to trace each edge.</div>
             <div class="btn-row" style="margin-top:6px">
               <button class="btn-primary" id="btn-apply-correction"   type="button" disabled>✓ Apply Distortion Correction →</button>
             </div>
@@ -1170,20 +1136,20 @@ let refBestChannel      = 1;
 let refChannelVariances = null;
 let refGridLinesData    = null;  // {answer_lines_h, answer_lines_v, id_lines_h, id_lines_v}
 
-// Edge-line drawing state
-// refEdgeLines values are [x1,y1,x2,y2] in ORIGINAL IMAGE pixel coordinates
+// Edge-polyline state
+// Each value is [[x,y],...] in ORIGINAL IMAGE pixel coordinates, or null
 const EDGE_NAMES = ['top', 'bottom', 'left', 'right'];
-let refEdgeLines  = { top: null, bottom: null, left: null, right: null };
-let edgeDrawMode  = null;     // 'top'|'bottom'|'left'|'right'|null
-let isEdgeDrawing = false;
-let edgeDrawStart   = null;   // {x, y} in canvas pixels
-let edgeDrawCurrent = null;   // {x, y} in canvas pixels
-
-// Polyline edge state (curved-edge mode)
-// Each value is [[x,y],...] in ORIGINAL IMAGE pixel coords, or null
 let refEdgePolylines = { top: null, bottom: null, left: null, right: null };
-let polylineMode     = false;  // whether polyline mode checkbox is checked
-let polylineDrawEdge = null;   // 'top'|'bottom'|'left'|'right'|null (active edge)
+let polylineDrawEdge = null;   // 'top'|'bottom'|'left'|'right'|null (active edge for adding points)
+let polylineRemoveMode = false; // whether remove-point mode is active
+let polylineDragEdge = null;   // edge whose point is being dragged
+let polylineDragIdx  = -1;     // index of the dragged point
+let polylineHoverEdge = null;  // edge whose point is under the cursor
+let polylineHoverIdx  = -1;    // index of the hovered point (-1 = none)
+
+// Hit/snap radii in canvas pixels
+const HIT_RADIUS  = 8;
+const SNAP_RADIUS = 15;
 
 // ── DOM ──────────────────────────────────────────────────────────────────────
 
@@ -1249,12 +1215,6 @@ const btnBackToEdges2  = $('btn-back-to-edges2');
 const btnShowEnhanced  = $('btn-show-enhanced');
 const btnBackToColor   = $('btn-back-to-color');
 const btnDetectGrid    = $('btn-detect-grid');
-
-// Edge-line coordinate input elements (keyed by edge name then coord index 0-3)
-const edgeCoordInputs = {};
-EDGE_NAMES.forEach(edge => {
-  edgeCoordInputs[edge] = ['x1', 'y1', 'x2', 'y2'].map(c => $(`ec-${edge}-${c}`));
-});
 
 // Graded-sheet tab elements
 const pendingInfo       = $('pending-info');
@@ -1325,8 +1285,8 @@ async function init() {
   // before Pyodide starts loading, so the UI reflects persisted values.
   restoreSettings();
   restoreRegions();
-  restoreEdgeLines();
   restoreEdgePolylines();
+  restoreEdgeLines();
   restoreResults();
 
   // Open IndexedDB and restore persisted images (fail silently if unavailable).
@@ -1791,12 +1751,6 @@ function saveRegions() {
   updateDetectGridBtn();
 }
 
-function saveEdgeLines() {
-  try {
-    localStorage.setItem(LS_EDGE_LINES, JSON.stringify(refEdgeLines));
-  } catch (_) {}
-}
-
 function saveEdgePolylines() {
   try {
     localStorage.setItem(LS_EDGE_POLYLINES, JSON.stringify(refEdgePolylines));
@@ -1804,20 +1758,27 @@ function saveEdgePolylines() {
 }
 
 function restoreEdgeLines() {
+  // Backward compat: convert old straight-line data ([x1,y1,x2,y2]) to
+  // 2-point polylines for any edges not already restored from bsam_edge_polylines.
   try {
     const raw = localStorage.getItem(LS_EDGE_LINES);
     if (!raw) return;
     const el = JSON.parse(raw);
     if (el && typeof el === 'object') {
-      refEdgeLines = {
-        top:    Array.isArray(el.top)    ? el.top    : null,
-        bottom: Array.isArray(el.bottom) ? el.bottom : null,
-        left:   Array.isArray(el.left)   ? el.left   : null,
-        right:  Array.isArray(el.right)  ? el.right  : null,
-      };
+      const convert = (ln) => Array.isArray(ln) && ln.length === 4
+        ? [[ln[0], ln[1]], [ln[2], ln[3]]] : null;
+      EDGE_NAMES.forEach(edge => {
+        if (!refEdgePolylines[edge]) {
+          const poly = convert(el[edge]);
+          if (poly) refEdgePolylines[edge] = poly;
+        }
+      });
+      // Migrate to new format and remove old key.
+      localStorage.removeItem(LS_EDGE_LINES);
+      saveEdgePolylines();
       updateApplyCorrectionBtn();
       updateEdgeStatus();
-      updateAllEdgeInputs();
+      updateEdgeButtonLabels();
     }
   } catch (_) {}
 }
@@ -1834,13 +1795,6 @@ function restoreEdgePolylines() {
         left:   Array.isArray(ep.left)   ? ep.left   : null,
         right:  Array.isArray(ep.right)  ? ep.right  : null,
       };
-      // If any polylines were saved, restore polyline mode
-      const hasAny = Object.values(refEdgePolylines).some(v => Array.isArray(v) && v.length >= 2);
-      if (hasAny) {
-        polylineMode = true;
-        $('chk-polyline-mode').checked = true;
-        $('btn-poly-clear').style.display = '';
-      }
       updateApplyCorrectionBtn();
       updateEdgeStatus();
       updateEdgeButtonLabels();
@@ -2639,13 +2593,13 @@ btnRefClear.addEventListener('click', () => {
   refEnhancedImageEl   = null;
   refCorrectedImageB64 = null;
   refGridLinesData     = null;
-  refEdgeLines  = { top: null, bottom: null, left: null, right: null };
   refEdgePolylines = { top: null, bottom: null, left: null, right: null };
-  edgeDrawMode  = null;
-  polylineDrawEdge = null;
-  isEdgeDrawing = false;
-  edgeDrawStart   = null;
-  edgeDrawCurrent = null;
+  polylineDrawEdge   = null;
+  polylineRemoveMode = false;
+  polylineDragEdge   = null;
+  polylineDragIdx    = -1;
+  polylineHoverEdge  = null;
+  polylineHoverIdx   = -1;
   drawMode    = null;
   answerRegion = null;
   idRegion     = null;
@@ -2658,9 +2612,10 @@ btnRefClear.addEventListener('click', () => {
   setDrawMode(null);
   idbDelete(IDB_KEY_REF).catch(() => {});
   saveRegions();
-  saveEdgeLines();
-  updateAllEdgeInputs();
   saveEdgePolylines();
+  updateApplyCorrectionBtn();
+  updateEdgeStatus();
+  updateEdgeButtonLabels();
 });
 
 btnDrawAnswer.addEventListener('click', () => setDrawMode(drawMode === 'answer' ? null : 'answer'));
@@ -2670,16 +2625,14 @@ btnClearAnswer.addEventListener('click', () => { answerRegion = null; redrawRefC
 btnClearId.addEventListener('click',     () => { idRegion = null;     redrawRefCanvas(); saveRegions(); });
 
 function setDrawMode(mode) {
-  // Switching to a region-draw mode clears edge-draw mode.
-  edgeDrawMode    = null;
-  isEdgeDrawing   = false;
-  edgeDrawStart   = null;
-  edgeDrawCurrent = null;
-  polylineDrawEdge = null;
+  // Switching to a region-draw mode clears polyline modes.
+  polylineDrawEdge   = null;
+  polylineRemoveMode = false;
   EDGE_NAMES.forEach(e => {
     const b = $(`btn-edge-${e}`);
     if (b) b.style.fontWeight = '';
   });
+  updateRemovePointBtn();
 
   drawMode = mode;
   refCanvas.className = mode ? `mode-${mode}` : '';
@@ -2695,32 +2648,7 @@ function setDrawMode(mode) {
 }
 
 function setEdgeDrawMode(edge) {
-  if (polylineMode) {
-    // Polyline mode: clicking the active edge button again deactivates it.
-    drawMode  = null;
-    isDrawing = false;
-    drawStart   = null;
-    drawCurrent = null;
-    btnDrawAnswer.style.fontWeight = '';
-    btnDrawId.style.fontWeight     = '';
-
-    polylineDrawEdge = (polylineDrawEdge === edge) ? null : edge;
-    refCanvas.className = polylineDrawEdge ? `mode-poly-${polylineDrawEdge}` : '';
-    ['top', 'bottom', 'left', 'right'].forEach(e => {
-      const b = $(`btn-edge-${e}`);
-      if (b) b.style.fontWeight = (e === polylineDrawEdge) ? '700' : '';
-    });
-    if (polylineDrawEdge) {
-      refModeHint.textContent =
-        `Click on the image to add points along the ${polylineDrawEdge} edge. ` +
-        `Click the button again to finish this edge.`;
-    } else {
-      refModeHint.textContent = 'Select an edge button, then click points on the image to trace it.';
-    }
-    return;
-  }
-
-  // Straight-line mode: Switching to edge-draw mode clears region-draw mode.
+  // Toggle: clicking the active edge button again deactivates it.
   drawMode  = null;
   isDrawing = false;
   drawStart   = null;
@@ -2728,16 +2656,22 @@ function setEdgeDrawMode(edge) {
   btnDrawAnswer.style.fontWeight = '';
   btnDrawId.style.fontWeight     = '';
 
-  edgeDrawMode = edge;
-  refCanvas.className = edge ? `mode-edge-${edge}` : '';
+  // Deactivate remove mode when entering edge-draw mode.
+  polylineRemoveMode = false;
+  updateRemovePointBtn();
+
+  polylineDrawEdge = (polylineDrawEdge === edge) ? null : edge;
+  refCanvas.className = polylineDrawEdge ? `mode-poly-${polylineDrawEdge}` : '';
   EDGE_NAMES.forEach(e => {
     const b = $(`btn-edge-${e}`);
-    if (b) b.style.fontWeight = (e === edge) ? '700' : '';
+    if (b) b.style.fontWeight = (e === polylineDrawEdge) ? '700' : '';
   });
-  if (edge) {
-    refModeHint.textContent = `Drag to draw the ${edge} edge line (purple dashed).`;
+  if (polylineDrawEdge) {
+    refModeHint.textContent =
+      `Click on the image to add points along the ${polylineDrawEdge} edge. ` +
+      `Click the button again to finish this edge.`;
   } else {
-    refModeHint.textContent = 'Select an edge to draw, then drag a line on the image.';
+    refModeHint.textContent = 'Select an edge button, then click points on the image to trace it.';
   }
 }
 
@@ -2756,27 +2690,97 @@ function getCanvasPos(e) {
   };
 }
 
+/** Update the "Remove Point" button visual state. */
+function updateRemovePointBtn() {
+  const btn = $('btn-remove-point');
+  if (btn) btn.style.fontWeight = polylineRemoveMode ? '700' : '';
+}
+
+/** Return {edge, idx} of the polyline point nearest to canvas coords (cx,cy),
+ *  or null if no point is within HIT_RADIUS pixels. */
+function findHoveredPoint(cx, cy) {
+  if (!refRawImageEl) return null;
+  const sx = refCanvas.width  / refRawImageEl.naturalWidth;
+  const sy = refCanvas.height / refRawImageEl.naturalHeight;
+  for (const edge of EDGE_NAMES) {
+    const pts = refEdgePolylines[edge];
+    if (!pts) continue;
+    for (let i = 0; i < pts.length; i++) {
+      if (Math.hypot(cx - pts[i][0] * sx, cy - pts[i][1] * sy) <= HIT_RADIUS) {
+        return { edge, idx: i };
+      }
+    }
+  }
+  return null;
+}
+
+/** Snap (ix, iy) in image coords to the first/last point of any neighbouring
+ *  edge if within SNAP_RADIUS canvas pixels.  ignoreEdge is excluded. */
+function snapToNeighborEndpoint(ix, iy, ignoreEdge) {
+  if (!refRawImageEl) return { ix, iy };
+  const sx = refCanvas.width  / refRawImageEl.naturalWidth;
+  const sy = refCanvas.height / refRawImageEl.naturalHeight;
+  const snapR = SNAP_RADIUS / Math.min(sx, sy);
+  for (const edge of EDGE_NAMES) {
+    if (edge === ignoreEdge) continue;
+    const pts = refEdgePolylines[edge];
+    if (!pts || pts.length === 0) continue;
+    for (const c of [pts[0], pts[pts.length - 1]]) {
+      if (Math.hypot(ix - c[0], iy - c[1]) <= snapR) {
+        return { ix: c[0], iy: c[1] };
+      }
+    }
+  }
+  return { ix, iy };
+}
+
 function onPointerDown(e) {
   if (!refImageEl) return;
-  if (polylineMode && polylineDrawEdge) {
-    // Polyline mode: each click/tap adds a point to the active edge.
-    const pos = getCanvasPos(e);
+  const pos = getCanvasPos(e);
+
+  if (polylineRemoveMode) {
+    // Remove mode: click a point to delete it.
+    const hit = findHoveredPoint(pos.x, pos.y);
+    if (hit) {
+      const pts = refEdgePolylines[hit.edge];
+      pts.splice(hit.idx, 1);
+      if (pts.length === 0) refEdgePolylines[hit.edge] = null;
+      polylineHoverEdge = null;
+      polylineHoverIdx  = -1;
+      updateApplyCorrectionBtn();
+      updateEdgeStatus();
+      updateEdgeButtonLabels();
+      saveEdgePolylines();
+      redrawRefCanvas();
+      e.preventDefault();
+    }
+    return;
+  }
+
+  // Check if starting a drag on an existing point.
+  const hit = findHoveredPoint(pos.x, pos.y);
+  if (hit) {
+    polylineDragEdge = hit.edge;
+    polylineDragIdx  = hit.idx;
+    refCanvas.style.cursor = 'grabbing';
+    e.preventDefault();
+    return;
+  }
+
+  if (polylineDrawEdge) {
+    // Add a new point to the active edge.
+    if (!refRawImageEl) return;
     const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
     const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
-    const ix = pos.x * scaleX;
-    const iy = pos.y * scaleY;
+    const raw = { ix: pos.x * scaleX, iy: pos.y * scaleY };
+    const snapped = snapToNeighborEndpoint(raw.ix, raw.iy, polylineDrawEdge);
     if (!refEdgePolylines[polylineDrawEdge]) refEdgePolylines[polylineDrawEdge] = [];
-    refEdgePolylines[polylineDrawEdge].push([ix, iy]);
+    refEdgePolylines[polylineDrawEdge].push([snapped.ix, snapped.iy]);
     updateApplyCorrectionBtn();
     updateEdgeStatus();
     updateEdgeButtonLabels();
     saveEdgePolylines();
     redrawRefCanvas();
-    e.preventDefault();
-  } else if (edgeDrawMode) {
-    isEdgeDrawing   = true;
-    edgeDrawStart   = getCanvasPos(e);
-    edgeDrawCurrent = edgeDrawStart;
     e.preventDefault();
   } else if (drawMode) {
     isDrawing   = true;
@@ -2787,41 +2791,72 @@ function onPointerDown(e) {
 }
 
 function onPointerMove(e) {
-  if (isEdgeDrawing) {
-    edgeDrawCurrent = getCanvasPos(e);
+  const pos = getCanvasPos(e);
+
+  if (polylineDragEdge !== null) {
+    // Drag an existing point.
+    if (refRawImageEl) {
+      const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
+      const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
+      const raw = { ix: pos.x * scaleX, iy: pos.y * scaleY };
+      const snapped = snapToNeighborEndpoint(raw.ix, raw.iy, polylineDragEdge);
+      refEdgePolylines[polylineDragEdge][polylineDragIdx] = [snapped.ix, snapped.iy];
+      redrawRefCanvas();
+    }
+    e.preventDefault();
+    return;
+  }
+
+  if (isDrawing) {
+    drawCurrent = pos;
     redrawRefCanvas();
     e.preventDefault();
-  } else if (isDrawing) {
-    drawCurrent = getCanvasPos(e);
+    return;
+  }
+
+  // Update hover state and cursor.
+  const hit = findHoveredPoint(pos.x, pos.y);
+  const prevEdge = polylineHoverEdge;
+  const prevIdx  = polylineHoverIdx;
+  polylineHoverEdge = hit ? hit.edge : null;
+  polylineHoverIdx  = hit ? hit.idx  : -1;
+
+  if (polylineRemoveMode) {
+    refCanvas.style.cursor = hit ? 'not-allowed' : 'default';
+  } else if (hit) {
+    refCanvas.style.cursor = 'grab';
+  } else if (polylineDrawEdge) {
+    refCanvas.style.cursor = 'crosshair';
+  } else {
+    refCanvas.style.cursor = '';
+  }
+
+  // Only redraw when hover state changes to avoid excessive paints.
+  if (prevEdge !== polylineHoverEdge || prevIdx !== polylineHoverIdx) {
     redrawRefCanvas();
-    e.preventDefault();
   }
 }
 
 function onPointerUp(e) {
-  if (isEdgeDrawing) {
-    isEdgeDrawing   = false;
-    edgeDrawCurrent = getCanvasPos(e);
-    if (edgeDrawStart && edgeDrawCurrent && refRawImageEl) {
-      // Convert canvas coords → original image pixel coords
+  if (polylineDragEdge !== null) {
+    if (refRawImageEl) {
+      const pos = getCanvasPos(e);
       const scaleX = refRawImageEl.naturalWidth  / refCanvas.width;
       const scaleY = refRawImageEl.naturalHeight / refCanvas.height;
-      const ix1 = edgeDrawStart.x   * scaleX;
-      const iy1 = edgeDrawStart.y   * scaleY;
-      const ix2 = edgeDrawCurrent.x * scaleX;
-      const iy2 = edgeDrawCurrent.y * scaleY;
-      // Only store if the line segment is long enough to be meaningful.
-      if (Math.abs(ix2 - ix1) > 2 || Math.abs(iy2 - iy1) > 2) {
-        refEdgeLines[edgeDrawMode] = [ix1, iy1, ix2, iy2];
-        updateApplyCorrectionBtn();
-        updateEdgeStatus();
-        updateEdgeInputs(edgeDrawMode);
-        saveEdgeLines();
-      }
+      const raw = { ix: pos.x * scaleX, iy: pos.y * scaleY };
+      const snapped = snapToNeighborEndpoint(raw.ix, raw.iy, polylineDragEdge);
+      refEdgePolylines[polylineDragEdge][polylineDragIdx] = [snapped.ix, snapped.iy];
     }
-    edgeDrawStart   = null;
-    edgeDrawCurrent = null;
+    polylineDragEdge = null;
+    polylineDragIdx  = -1;
+    saveEdgePolylines();
+    updateApplyCorrectionBtn();
+    updateEdgeStatus();
     redrawRefCanvas();
+    // Restore cursor based on new hover state.
+    const pos2 = getCanvasPos(e);
+    const hit2 = findHoveredPoint(pos2.x, pos2.y);
+    refCanvas.style.cursor = hit2 ? 'grab' : (polylineDrawEdge ? 'crosshair' : '');
     e.preventDefault();
   } else if (isDrawing) {
     isDrawing = false;
@@ -2943,9 +2978,8 @@ function redrawRefCanvas() {
     drawDetectedGridLines(refGridLinesData);
   }
 
-  // ── Edge lines / polylines (only at step 0) ──────────────────────────────
+  // ── Edge polylines (only at step 0) ─────────────────────────────────────
   if (refStep === 0) {
-    drawEdgeLines();
     drawEdgePolylines();
   }
 
@@ -3011,13 +3045,11 @@ function setRefStep(step) {
   redrawRefCanvas();
 }
 
-/** Enable the Apply-Correction button when all 4 edge lines OR all 4 polylines are drawn. */
+/** Enable the Apply-Correction button when all 4 edge polylines are drawn. */
 function updateApplyCorrectionBtn() {
-  const allLinesDefined     = refEdgeLines.top && refEdgeLines.bottom &&
-                              refEdgeLines.left && refEdgeLines.right;
-  const allPolysDefined     = ['top', 'bottom', 'left', 'right']
+  const allPolysDefined = EDGE_NAMES
     .every(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
-  btnApplyCorr.disabled = !allLinesDefined && !allPolysDefined;
+  btnApplyCorr.disabled = !allPolysDefined;
 }
 
 /** Enable "Detect Grid Lines" only at step 2 when at least one region is defined. */
@@ -3025,74 +3057,33 @@ function updateDetectGridBtn() {
   btnDetectGrid.disabled = !(refStep >= 2 && (answerRegion || idRegion));
 }
 
-/** Update the status text below the edge-line buttons. */
+/** Update the status text below the edge buttons. */
 function updateEdgeStatus() {
-  if (polylineMode) {
-    const polyDrawn   = EDGE_NAMES
-      .filter(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
-    const polyNeeded  = EDGE_NAMES
-      .filter(k => !(Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2));
-    if (polyNeeded.length === 0) {
-      refEdgeStatus.textContent = '✓ All 4 curved edges defined — click "Apply Distortion Correction".';
-    } else if (polyDrawn.length === 0) {
-      refEdgeStatus.textContent = 'Click an edge button, then click points on the image to trace each curved edge.';
-    } else {
-      refEdgeStatus.textContent = `Polylines drawn: ${polyDrawn.join(', ')}. Still needed: ${polyNeeded.join(', ')}.`;
-    }
+  const polyDrawn  = EDGE_NAMES
+    .filter(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
+  const polyNeeded = EDGE_NAMES
+    .filter(k => !(Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2));
+  if (polyNeeded.length === 0) {
+    refEdgeStatus.textContent = '✓ All 4 edges defined — click "Apply Distortion Correction".';
+  } else if (polyDrawn.length === 0) {
+    refEdgeStatus.textContent = 'Click an edge button, then click points on the image to trace each edge.';
   } else {
-    const drawn     = EDGE_NAMES.filter(k => refEdgeLines[k]);
-    const remaining = EDGE_NAMES.filter(k => !refEdgeLines[k]);
-    if (remaining.length === 0) {
-      refEdgeStatus.textContent = '✓ All 4 edge lines defined — click "Apply Distortion Correction".';
-    } else if (drawn.length === 0) {
-      refEdgeStatus.textContent = 'Draw all 4 edge lines on the image, or use Auto-detect.';
-    } else {
-      refEdgeStatus.textContent = `Drawn: ${drawn.join(', ')}. Still needed: ${remaining.join(', ')}.`;
-    }
+    refEdgeStatus.textContent = `Edges drawn: ${polyDrawn.join(', ')}. Still needed: ${polyNeeded.join(', ')}.`;
   }
 }
 
-/** Update edge button labels to show point counts in polyline mode. */
+/** Update edge button labels to show point counts. */
 function updateEdgeButtonLabels() {
   const icons  = { top: '▲', bottom: '▼', left: '◄', right: '►' };
   const labels = { top: 'Top', bottom: 'Bottom', left: 'Left', right: 'Right' };
-  ['top', 'bottom', 'left', 'right'].forEach(edge => {
+  EDGE_NAMES.forEach(edge => {
     const btn = $(`btn-edge-${edge}`);
     if (!btn) return;
-    if (polylineMode) {
-      const n = Array.isArray(refEdgePolylines[edge]) ? refEdgePolylines[edge].length : 0;
-      btn.textContent = n >= 2
-        ? `${icons[edge]} ${labels[edge]} (${n} pts)`
-        : `${icons[edge]} ${labels[edge]} Edge`;
-    } else {
-      btn.textContent = `${icons[edge]} ${labels[edge]} Edge`;
-    }
+    const n = Array.isArray(refEdgePolylines[edge]) ? refEdgePolylines[edge].length : 0;
+    btn.textContent = n >= 2
+      ? `${icons[edge]} ${labels[edge]} (${n} pts)`
+      : `${icons[edge]} ${labels[edge]} Edge`;
   });
-}
-
-/**
- * Populate coordinate inputs for one edge from refEdgeLines[edge].
- * Shows the input row when a line exists, hides it otherwise.
- */
-function updateEdgeInputs(edge) {
-  const row    = $(`edge-coord-row-${edge}`);
-  const inputs = edgeCoordInputs[edge];
-  const ln     = refEdgeLines[edge];
-  if (!row || !inputs) return;
-  if (ln) {
-    row.classList.add('has-line');
-    // Display coordinates rounded to integers (sub-pixel precision is not
-    // meaningful for alignment), without mutating the source array.
-    inputs.forEach((inp, i) => { inp.value = Math.round(ln[i]); });
-  } else {
-    row.classList.remove('has-line');
-    inputs.forEach(inp => { inp.value = ''; });
-  }
-}
-
-/** Refresh all four edge-line coordinate input rows. */
-function updateAllEdgeInputs() {
-  EDGE_NAMES.forEach(updateEdgeInputs);
 }
 
 /**
@@ -3110,102 +3101,30 @@ function orderPoints4(pts) {
 }
 
 /**
- * Extend the line through (px1,py1)-(px2,py2) to the canvas boundaries and
- * return {x1,y1,x2,y2} of the clipped endpoints.  Returns null for a
- * degenerate segment.
- */
-function extendLineToCanvas(px1, py1, px2, py2, cw, ch) {
-  const dx = px2 - px1, dy = py2 - py1;
-  if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) return null;
-  const ts = [];
-  if (Math.abs(dx) > 1e-6) { ts.push(-px1 / dx); ts.push((cw - px1) / dx); }
-  if (Math.abs(dy) > 1e-6) { ts.push(-py1 / dy); ts.push((ch - py1) / dy); }
-  ts.sort((a, b) => a - b);
-  return {
-    x1: px1 + ts[0] * dx,            y1: py1 + ts[0] * dy,
-    x2: px1 + ts[ts.length - 1] * dx, y2: py1 + ts[ts.length - 1] * dy,
-  };
-}
-
-/** Draw all committed edge lines and the live drag line onto the canvas. */
-function drawEdgeLines() {
-  if (!refRawImageEl) return;
-  const sx = refCanvas.width  / refRawImageEl.naturalWidth;
-  const sy = refCanvas.height / refRawImageEl.naturalHeight;
-
-  refCtx.save();
-  refCtx.strokeStyle = '#7c3aed';
-  refCtx.lineWidth   = 2;
-  refCtx.setLineDash([7, 5]);
-  refCtx.shadowColor = 'rgba(0,0,0,.35)';
-  refCtx.shadowBlur  = 3;
-
-  EDGE_NAMES.forEach(key => {
-    const ln = refEdgeLines[key];
-    if (!ln) return;
-    const ext = extendLineToCanvas(ln[0] * sx, ln[1] * sy, ln[2] * sx, ln[3] * sy,
-                                   refCanvas.width, refCanvas.height);
-    if (!ext) return;
-    refCtx.globalAlpha = 0.9;
-    refCtx.beginPath();
-    refCtx.moveTo(ext.x1, ext.y1);
-    refCtx.lineTo(ext.x2, ext.y2);
-    refCtx.stroke();
-    // Label
-    const mx = (ext.x1 + ext.x2) / 2, my = (ext.y1 + ext.y2) / 2;
-    refCtx.save();
-    refCtx.setLineDash([]);
-    refCtx.shadowBlur = 0;
-    refCtx.fillStyle = '#7c3aed';
-    refCtx.globalAlpha = 0.9;
-    refCtx.font = 'bold 11px sans-serif';
-    refCtx.fillText(key[0].toUpperCase(), mx + 4, my - 4);
-    refCtx.restore();
-  });
-
-  // Live drag line
-  if (isEdgeDrawing && edgeDrawStart && edgeDrawCurrent) {
-    const ext = extendLineToCanvas(
-      edgeDrawStart.x, edgeDrawStart.y,
-      edgeDrawCurrent.x, edgeDrawCurrent.y,
-      refCanvas.width, refCanvas.height
-    );
-    if (ext) {
-      refCtx.globalAlpha = 0.55;
-      refCtx.beginPath();
-      refCtx.moveTo(ext.x1, ext.y1);
-      refCtx.lineTo(ext.x2, ext.y2);
-      refCtx.stroke();
-    }
-  }
-
-  refCtx.restore();
-}
-
-/**
  * Draw all committed edge polylines onto the canvas.
- * Each polyline is drawn as a connected set of line segments with filled dots
- * at each control point.
+ * Each polyline is drawn as connected line segments with filled dots at each
+ * control point.  Hovered points (grab/remove) and dragged points are
+ * highlighted with a larger dot and contrasting fill.
  */
 function drawEdgePolylines() {
   if (!refRawImageEl) return;
   const sx = refCanvas.width  / refRawImageEl.naturalWidth;
   const sy = refCanvas.height / refRawImageEl.naturalHeight;
 
-  // Sky-blue color to distinguish polylines from straight lines.
-  const POLY_COLOR = '#0ea5e9';
-  const DOT_RADIUS = 4;
+  const POLY_COLOR   = '#0ea5e9';
+  const REMOVE_COLOR = '#dc2626';
+  const DOT_RADIUS   = 4;
+  const DOT_RADIUS_LG = 7;
 
   refCtx.save();
   refCtx.strokeStyle = POLY_COLOR;
-  refCtx.fillStyle   = POLY_COLOR;
   refCtx.lineWidth   = 2;
   refCtx.setLineDash([]);
   refCtx.shadowColor = 'rgba(0,0,0,.30)';
   refCtx.shadowBlur  = 2;
   refCtx.globalAlpha = 0.9;
 
-  ['top', 'bottom', 'left', 'right'].forEach(key => {
+  EDGE_NAMES.forEach(key => {
     const pts = refEdgePolylines[key];
     if (!pts || pts.length === 0) return;
 
@@ -3217,11 +3136,38 @@ function drawEdgePolylines() {
     }
     refCtx.stroke();
 
-    // Draw dots at each point
-    pts.forEach(pt => {
-      refCtx.beginPath();
-      refCtx.arc(pt[0] * sx, pt[1] * sy, DOT_RADIUS, 0, 2 * Math.PI);
-      refCtx.fill();
+    // Draw dots at each point, highlighting hovered/dragged ones.
+    pts.forEach((pt, i) => {
+      const isHovered = (key === polylineHoverEdge && i === polylineHoverIdx);
+      const isDragged = (key === polylineDragEdge  && i === polylineDragIdx);
+      const r = (isHovered || isDragged) ? DOT_RADIUS_LG : DOT_RADIUS;
+      refCtx.save();
+      refCtx.shadowBlur = 0;
+      if (isHovered && polylineRemoveMode) {
+        // Red fill → signals click will delete this point.
+        refCtx.fillStyle   = REMOVE_COLOR;
+        refCtx.strokeStyle = '#fff';
+        refCtx.lineWidth   = 2;
+        refCtx.beginPath();
+        refCtx.arc(pt[0] * sx, pt[1] * sy, r, 0, 2 * Math.PI);
+        refCtx.fill();
+        refCtx.stroke();
+      } else if (isHovered || isDragged) {
+        // White fill with sky-blue border → signals grab/drag.
+        refCtx.fillStyle   = '#fff';
+        refCtx.strokeStyle = POLY_COLOR;
+        refCtx.lineWidth   = 2.5;
+        refCtx.beginPath();
+        refCtx.arc(pt[0] * sx, pt[1] * sy, r, 0, 2 * Math.PI);
+        refCtx.fill();
+        refCtx.stroke();
+      } else {
+        refCtx.fillStyle = POLY_COLOR;
+        refCtx.beginPath();
+        refCtx.arc(pt[0] * sx, pt[1] * sy, r, 0, 2 * Math.PI);
+        refCtx.fill();
+      }
+      refCtx.restore();
     });
 
     // Label near the last point
@@ -3285,17 +3231,9 @@ async function applyRefCorrection() {
   await new Promise(r => setTimeout(r, 20)); // yield so the label renders
 
   try {
-    // Prefer polylines when all 4 are defined; fall back to straight lines.
-    const allPolysDefined = ['top', 'bottom', 'left', 'right']
-      .every(k => Array.isArray(refEdgePolylines[k]) && refEdgePolylines[k].length >= 2);
-    const polylinesJson = allPolysDefined ? JSON.stringify(refEdgePolylines) : 'null';
-
-    // Collect edge lines (in original image pixel coords)
-    const lines = [refEdgeLines.top, refEdgeLines.bottom,
-                   refEdgeLines.left, refEdgeLines.right];
-    const edgesJson = (!allPolysDefined && lines.every(Boolean)) ? JSON.stringify(lines) : 'null';
-
-    const resultJson = processRefImageFn(rawBytes, edgesJson, polylinesJson);
+    // Always use polylines for distortion correction.
+    const polylinesJson = JSON.stringify(refEdgePolylines);
+    const resultJson = processRefImageFn(rawBytes, 'null', polylinesJson);
     const result = JSON.parse(resultJson);
     if (!result) return;
 
@@ -3419,27 +3357,14 @@ async function detectRefGrid() {
 EDGE_NAMES.forEach(edge => {
   const btn = $(`btn-edge-${edge}`);
   if (!btn) return;
-  btn.addEventListener('click', () =>
-    setEdgeDrawMode(edgeDrawMode === edge ? null : edge));
+  btn.addEventListener('click', () => setEdgeDrawMode(edge));
 });
 
 btnEdgeClear.addEventListener('click', () => {
-  refEdgeLines     = { top: null, bottom: null, left: null, right: null };
-  refEdgePolylines = { top: null, bottom: null, left: null, right: null };
+  refEdgePolylines   = { top: null, bottom: null, left: null, right: null };
+  polylineRemoveMode = false;
+  updateRemovePointBtn();
   setEdgeDrawMode(null);
-  polylineDrawEdge = null;
-  updateApplyCorrectionBtn();
-  updateEdgeStatus();
-  updateAllEdgeInputs();
-  updateEdgeButtonLabels();
-  saveEdgeLines();
-  saveEdgePolylines();
-  redrawRefCanvas();
-});
-
-$('btn-poly-clear').addEventListener('click', () => {
-  refEdgePolylines = { top: null, bottom: null, left: null, right: null };
-  polylineDrawEdge = null;
   updateApplyCorrectionBtn();
   updateEdgeStatus();
   updateEdgeButtonLabels();
@@ -3447,26 +3372,21 @@ $('btn-poly-clear').addEventListener('click', () => {
   redrawRefCanvas();
 });
 
-$('chk-polyline-mode').addEventListener('change', (e) => {
-  polylineMode = e.target.checked;
-  $('btn-poly-clear').style.display = polylineMode ? '' : 'none';
-  // Cancel any active edge drawing when toggling mode.
-  edgeDrawMode     = null;
-  isEdgeDrawing    = false;
-  edgeDrawStart    = null;
-  edgeDrawCurrent  = null;
-  polylineDrawEdge = null;
-  refCanvas.className = '';
-  ['top', 'bottom', 'left', 'right'].forEach(e => {
-    const b = $(`btn-edge-${e}`);
-    if (b) b.style.fontWeight = '';
-  });
-  updateEdgeStatus();
-  updateEdgeButtonLabels();
-  if (polylineMode) {
-    refModeHint.textContent = 'Select an edge button, then click points on the image to trace it.';
+$('btn-remove-point').addEventListener('click', () => {
+  polylineRemoveMode = !polylineRemoveMode;
+  updateRemovePointBtn();
+  if (polylineRemoveMode) {
+    // Deactivate edge-draw mode when entering remove mode.
+    polylineDrawEdge = null;
+    refCanvas.className = '';
+    EDGE_NAMES.forEach(e => {
+      const b = $(`btn-edge-${e}`);
+      if (b) b.style.fontWeight = '';
+    });
+    refModeHint.textContent = 'Click any point to remove it. Click "Remove Point" again to exit.';
   } else {
-    refModeHint.textContent = 'Select an edge to draw, then drag a line on the image.';
+    refModeHint.textContent = 'Select an edge button, then click points on the image to trace it.';
+    refCanvas.style.cursor = '';
   }
 });
 
@@ -3480,16 +3400,16 @@ btnAutoEdges.addEventListener('click', async () => {
       return;
     }
     const [tl, tr, br, bl] = orderPoints4(result.contour);
-    refEdgeLines = {
-      top:    [tl[0], tl[1], tr[0], tr[1]],
-      right:  [tr[0], tr[1], br[0], br[1]],
-      bottom: [bl[0], bl[1], br[0], br[1]],
-      left:   [tl[0], tl[1], bl[0], bl[1]],
+    refEdgePolylines = {
+      top:    [[tl[0], tl[1]], [tr[0], tr[1]]],
+      right:  [[tr[0], tr[1]], [br[0], br[1]]],
+      bottom: [[bl[0], bl[1]], [br[0], br[1]]],
+      left:   [[tl[0], tl[1]], [bl[0], bl[1]]],
     };
     updateApplyCorrectionBtn();
     updateEdgeStatus();
-    updateAllEdgeInputs();
-    saveEdgeLines();
+    updateEdgeButtonLabels();
+    saveEdgePolylines();
     redrawRefCanvas();
   } catch (err) {
     refEdgeStatus.textContent = `Auto-detect error: ${err.message}`;
@@ -3505,32 +3425,6 @@ btnBackToEdges2.addEventListener('click', () => setRefStep(0));
 btnShowEnhanced.addEventListener('click', () => showEnhancedImage());
 btnBackToColor.addEventListener('click',  () => setRefStep(1));
 btnDetectGrid.addEventListener('click',   () => detectRefGrid());
-
-// ── Coordinate input event handlers ──────────────────────────────────────────
-
-/** Returns a debounced version of fn that delays invocation by `ms` ms. */
-function debounce(fn, ms) {
-  let timer;
-  return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
-}
-
-EDGE_NAMES.forEach(edge => {
-  edgeCoordInputs[edge].forEach((inp, i) => {
-    if (!inp) return;
-    inp.addEventListener('input', debounce(() => {
-      const ln = refEdgeLines[edge];
-      if (!ln) { updateEdgeInputs(edge); return; }
-      const val = Math.round(parseFloat(inp.value));
-      if (!Number.isFinite(val)) { inp.value = Math.round(ln[i]); return; }
-      ln[i] = val;
-      inp.value = val;
-      updateApplyCorrectionBtn();
-      updateEdgeStatus();
-      saveEdgeLines();
-      redrawRefCanvas();
-    }, 200));
-  });
-});
 
 // ── Collapsible settings ─────────────────────────────────────────────────────
 
