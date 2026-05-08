@@ -77,6 +77,6 @@ jobs:
           path: ios-app
 
       - name: Upload iOS app to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: ios-app/**/*.app
