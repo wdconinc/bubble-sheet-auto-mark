@@ -89,7 +89,7 @@ jobs:
 
     steps:
       - name: Download APK artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: bubble-sheet-auto-mark-apk
           path: apk
